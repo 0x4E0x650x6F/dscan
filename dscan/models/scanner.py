@@ -9,7 +9,6 @@ import os
 import ipaddress
 import hashlib
 from dscan import log
-from itertools import (takewhile, repeat)
 
 
 class ServerConfig:
