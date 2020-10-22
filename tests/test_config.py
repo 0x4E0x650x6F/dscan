@@ -142,12 +142,40 @@ class TestSettings(unittest.TestCase):
         self.data.close()
 
     def test_server(self):
+        expect_disc = "-n -sn -PE -PP -PS 21,22,23,25,80,113,31339 -PA 80," \
+                      "113,443,10042"
+        expect_st1 = "-sS -n -PE -PP -PS 21,22,23,25,80,113,31339 -PA 80," \
+                     "113,443,10042 -p 80,443,8080"
+        expect_st2 = "-sS -n -PE -PP -PS 21,22,23,25,80,113,31339 -PA 80," \
+                     "113,443,10042 -p 25,135,137,139,445,1433,3306,5432"
+        expect_st3 = "-sS -n -PE -PP -PS 21,22,23,25,80,113,31339 -PA 80," \
+                     "113,443,10042 -p 23,21,22,110,111,2049,3389"
+        expect_st4 = "-sS -n -PE -PP -PS 21,22,23,25,80,113,31339 -PA 80," \
+                     "113,443,10042 -p 0-20,24,26-79,81-109,112-134,136,138," \
+                     "140-442,444," \
+                     "446-1432,1434-2048,2050-3305,3307-3388,3390-5431," \
+                     "5433-8079,8081-29999"
+        expect_st5 = "-sS -n -PE -PP -PS 21,22,23,25,80,113,31339 -PA 80," \
+                     "113,443,10042 -p 30000-65535"
+
         self.assertEqual('127.0.0.1', self.config.host)
         self.assertEqual('2040', self.config.port)
         self.assertEqual('test/run/targets.work', self.config.queue_path)
         self.assertEqual('test/run/current.trace', self.config.resume_path)
         self.assertEqual('data/certfile.crt', self.config.sslcert)
         self.assertEqual('data/keyfile.key', self.config.sslkey)
+        self.assertEqual(expect_disc,
+                         self.config.scan_options.get('discovery'))
+        self.assertEqual(expect_st1,
+                         self.config.scan_options.get('scan-stage1'))
+        self.assertEqual(expect_st2,
+                         self.config.scan_options.get('scan-stage2'))
+        self.assertEqual(expect_st3,
+                         self.config.scan_options.get('scan-stage3'))
+        self.assertEqual(expect_st4,
+                         self.config.scan_options.get('scan-stage4'))
+        self.assertEqual(expect_st5,
+                         self.config.scan_options.get('scan-stage5'))
         self.assertEqual(2, self.mock_makedirs.call_count)
         self.mock_makedirs.assert_any_call('test/reports', exist_ok=True)
         self.mock_makedirs.assert_any_call('test/run', exist_ok=True)
