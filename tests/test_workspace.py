@@ -60,7 +60,7 @@ class TestStateFullFile(unittest.TestCase):
         self.assertEqual('192.168.10.0/24', line)
         self.assertEqual(1, self.obj_file.lineno)
         self.assertEqual(len('192.168.10.0/24\n'), self.obj_file.loc)
-        #self.obj_file.close()
+        self.obj_file.close()
 
     @patch("os.stat")
     def test_serialize(self, os_stat):
