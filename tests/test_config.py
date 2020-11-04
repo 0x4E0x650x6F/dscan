@@ -161,26 +161,24 @@ class TestSettings(unittest.TestCase):
         self.assertEqual('127.0.0.1', self.config.host)
         self.assertEqual('2040', self.config.port)
         self.assertEqual('test/run/targets.work', self.config.queue_path)
+        self.assertEqual('test/run/live-targets.work',
+                         self.config.ltargets_path)
         self.assertEqual('test/run/current.trace', self.config.resume_path)
         self.assertEqual('data/certfile.crt', self.config.sslcert)
         self.assertEqual('data/keyfile.key', self.config.sslkey)
-        self.assertEqual(expect_disc,
-                         self.config.scan_options.get('discovery'))
-        self.assertEqual(expect_st1,
-                         self.config.scan_options.get('scan-stage1'))
-        self.assertEqual(expect_st2,
-                         self.config.scan_options.get('scan-stage2'))
-        self.assertEqual(expect_st3,
-                         self.config.scan_options.get('scan-stage3'))
-        self.assertEqual(expect_st4,
-                         self.config.scan_options.get('scan-stage4'))
-        self.assertEqual(expect_st5,
-                         self.config.scan_options.get('scan-stage5'))
+        self.assertEqual(expect_disc, self.config.stage_list[0].options)
+        self.assertEqual(expect_st1, self.config.stage_list[1].options)
+        self.assertEqual(expect_st2, self.config.stage_list[2].options)
+        self.assertEqual(expect_st3, self.config.stage_list[3].options)
+        self.assertEqual(expect_st4, self.config.stage_list[4].options)
+        self.assertEqual(expect_st5, self.config.stage_list[5].options)
         self.assertEqual(2, self.mock_makedirs.call_count)
+        self.assertEqual('test/reports', self.config.outdir)
         self.mock_makedirs.assert_any_call('test/reports', exist_ok=True)
         self.mock_makedirs.assert_any_call('test/run', exist_ok=True)
 
     def test_address_optimization(self):
+        # noinspection PyArgumentList
         with patch('builtins.open', mock_open()) as mopen:
             handle = mopen()
             self.config.target_optimization(self.targets)
@@ -193,6 +191,7 @@ class TestSettings(unittest.TestCase):
     def test_agent(self):
         with patch('os.makedirs') as mock_makedirs:
             agent_config = Config(self.cfg, self.agent_options)
+            self.assertEqual('test/reports', agent_config.outdir)
             self.assertEqual('127.0.0.1', agent_config.host)
             self.assertEqual('2040', agent_config.port)
             self.assertEqual(1, mock_makedirs.call_count)

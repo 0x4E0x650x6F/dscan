@@ -5,15 +5,17 @@
 scanner.py
 scanner runtime models
 """
+
 import os
 import ipaddress
 import hashlib
+from enum import Enum
 from dscan import log
 
 
 class ServerConfig:
     SERVER = (
-        'server', 'stats', 'queue', 'trace',
+        'server', 'stats', 'targets', 'live-targets', 'trace',
     )
 
     SSL_CERTS = (
@@ -22,23 +24,26 @@ class ServerConfig:
 
     SCAN_CONF = 'nmap-scan'
 
-    def __init__(self, config, options):
+    def __init__(self, config, options, outdir):
         """
         :param config: configparser with the configuration
         :type config: `configparser.ConfigParser`
         :param options: argument parser `argparse.ArgumentParser`
         with the user options
         """
+        self.outdir = outdir
         self.rundir = os.path.join(
             options.name, config.get(*self.SERVER[0:2:1]))
         self.queue_path = os.path.join(
             options.name, config.get(*self.SERVER[0:3:2]))
-        self.resume_path = os.path.join(
+        self.ltargets_path = os.path.join(
             options.name, config.get(*self.SERVER[0:4:3]))
+        self.resume_path = os.path.join(
+            options.name, config.get(*self.SERVER[0:5:4]))
         self.host = options.b
         os.makedirs(self.rundir, exist_ok=True)
         # init scan stages !
-        self.scan_options = dict(config.items('nmap-scan'))
+        self.__create_stages(dict(config.items('nmap-scan')))
         # set cert properties
         self.sslcert = config.get(*self.SSL_CERTS[0:2:1])
         self.sslkey = config.get(*self.SSL_CERTS[0:3:2])
@@ -49,6 +54,18 @@ class ServerConfig:
                 self.secret_key = digest.hexdigest().encode("utf-8")
         except OSError as ex:
             log.error(f"failed to open cert file {ex}")
+
+    def __create_stages(self, scan_options):
+        self.stage_list = []
+        for name, options in scan_options.items():
+            options = scan_options.get(name)
+            if name == "discovery":
+                self.stage_list.append(DiscoveryStage(self.queue_path,
+                                                      options, self.outdir,
+                                                      self.ltargets_path))
+            else:
+                self.stage_list.append(Stage(name, self.ltargets_path,
+                                             options))
 
     def target_optimization(self, targets):
         """
@@ -99,7 +116,7 @@ class Config:
         os.makedirs(self.outdir, exist_ok=True)
         self.config = None
         if options.cmd == 'srv':
-            self.config = ServerConfig(config, options)
+            self.config = ServerConfig(config, options, self.outdir)
         else:
             self.host = options.s
 
@@ -107,7 +124,7 @@ class Config:
         if hasattr(self.config, name):
             return getattr(self.config, name)
         else:
-            raise AttributeError("invalid key %s" % name)
+            raise AttributeError(f"invalid key {name}")
 
 
 class File:
@@ -137,6 +154,7 @@ class File:
             self._line_count()
 
     def readline(self):
+        self.open()  # open the file if its not open already
         self.lineno += 1
         line = self._fd.readline()
         self.loc = self._fd.tell()
@@ -144,7 +162,7 @@ class File:
             return None
         if line.endswith('\n'):
             line = line[:-1]
-        return self.loc, line
+        return line
 
     def isempty(self):
         """
@@ -197,7 +215,7 @@ class File:
         if hasattr(self._fd, name):
             return getattr(self._fd, name)
         else:
-            raise AttributeError("invalid key %s" % name)
+            raise AttributeError(f"invalid key {name}")
 
     def __getstate__(self):
         # Copy the object's state from self.__dict__ which contains
@@ -223,3 +241,219 @@ class File:
     def __len__(self):
         self.open()
         return self.nlines
+
+    def __str__(self):
+        return f"File(path:{self._path}, nlines: {self.nlines}, lineno:" \
+               f"{self.lineno}, mode:{self.mode})"
+
+
+class STATUS(Enum):
+    """
+    Each Scan task has the following states:
+    - Scheduled: the default state set when its created.
+    - Running: Set after the agent has confirmed the task has started
+    executing.
+    - Interrupted: Set when the task is aborted by agent, or the server has
+    been halted.
+    - Downloading: Set when the agent notifies its ready to sent the report.
+    - Completed: Set only after the report has been received successfully
+    """
+    SCHEDULED = 1
+    RUNNING = 2
+    INTERRUPTED = 3
+    DOWNLOADING = 4
+    COMPLETED = 5
+
+
+class Task:
+    """
+    Representation of a scan task.
+    A scan task is sent to an agent with a target and, scan options.
+    Each task has the following states:
+    - Scheduled: the default state set when its created.
+    - Running: Set after the agent has confirmed the task has started
+    executing.
+    - Interrupted: Set when the task is aborted by agent, or the server has
+    been halted.
+    - Downloading: Set when the agent notifies its ready to sent the report.
+    - Completed: Set only after the report has been received successfully.
+    """
+
+    def __init__(self, stage_name, options, target):
+        """
+        :param stage_name:
+        :param options:
+        :param target:
+        :type stage_name: `str`
+        :type options: `str`
+        :type target: `str`
+        """
+        self.stage_name = stage_name
+        self.options = options
+        self.target = target
+        self.status = STATUS.SCHEDULED
+
+    def update(self, status):
+        assert isinstance(status, STATUS)
+        self.status = status
+
+    def values(self):
+        """
+        returns a tuple with the target and scan options.
+        :return: tuple options, target
+        :rtype tuple:
+        """
+        return self.options, self.target
+
+
+class Stage:
+
+    def __init__(self, stage_name, targets_path, options):
+        assert targets_path, "Invalid targets file Name"
+        assert stage_name, "Invalid stage Name"
+        self.targets_path = targets_path
+        self.name = stage_name
+        self.targets = File(self.targets_path)
+        self.options = options
+        self.ftargets = 0
+
+    def next_task(self):
+        target = self.targets.readline()
+        if target:
+            return Task(self.name, self.options, target)
+        else:
+            return None
+
+    def inc_finished(self):
+        self.ftargets += 1
+
+    def process_results(self, report):
+        pass
+
+    @property
+    def isfinished(self):
+        if self.targets.nlines == self.ftargets:
+            return True
+        else:
+            return False
+
+    def close(self):
+        self.targets.close()
+
+    def as_tuple(self):
+        return self.name, self.targets.nlines, self.targets.lineno, \
+               self.ftargets
+
+
+class DiscoveryStage(Stage):
+
+    def __init__(self, targets_path, options, outdir, ltargets_path):
+        super().__init__("discovery", targets_path, options)
+        self.ltargets_path = ltargets_path
+        self.reports_path = outdir
+
+    def process_results(self, report):
+        pass
+
+
+class Context:
+    """
+    Context is a thread safe proxy like class, responsible for all the
+    execution flow and inherent logic.
+    Acts as a proxy between the active stages and the `stage` implementation.
+    """
+    def __init__(self, options):
+        self.stage_list = list(options.stage_list)
+        self.cstage_name = None
+        self.active_stages = {}
+        self.reports_path = options.outdir
+        self.active = {}
+        self.pending = []
+
+    def __cstage(self, force_next=False):
+        """
+        :param force_next: if True wil force the stage to advance one step
+        defaults to False
+        :type force_next: `bool`
+        :return: An instance of `stage`
+        :rtype: `stage`
+        """
+        try:
+            if not self.cstage_name or force_next:
+                stage = self.stage_list.pop(0)
+                self.active_stages[stage.name] = stage
+                self.cstage_name = stage.name
+
+            return self.active_stages[self.cstage_name]
+        except IndexError:
+            log.error("Stage list is empty !")
+            return None
+
+    def __find_task_stage(self, agent):
+        """
+        :param agent: str with ipaddress and port in ip:port format
+        :return: tuple `Task` and `Stage` that created that task
+        :rtype: `tuple`
+        """
+        tstage = None
+        task = self.active.get(agent, None)
+        if task:
+            tstage = self.active_stages.get(task.stage_name, None)
+        return task, tstage
+
+    def pop_target(self, agent):
+        """
+        Gets the next `Task` from the current Active Stage, if their are no
+        pending `Tasks` to be executed.
+        Pending tasks are tasks that are canceled or restored from a previous
+        interrupted session.
+        If a stage is finished (no more targets), the next stage will take
+        another stage from the list until its finished!
+        :param agent: str with ipaddress and port in ip:port format
+        :return: A target to scan! `task`
+        :rtype: `Task`
+        """
+        task = None
+        if len(self.pending) > 0:
+            task = self.pending.pop(0)
+        else:
+            cstage = self.__cstage()
+            if cstage:
+                task = cstage.next_task()
+                if not task:
+                    # the only stage that needs to be finished to proceed is
+                    # discovery as the other stages need the list of live hosts
+                    if cstage.name != "discovery" or cstage.isfinished:
+                        if cstage.isfinished:
+                            cstage.close()
+                        cstage = self.__cstage(True)
+                        if cstage:
+                            task = cstage.next_task()
+
+        # if we have a valid task save it in the active collection
+        if task:
+            self.active.update({agent: task})
+
+        return task
+
+    def completed(self, agent):
+        task, tstage = self.__find_task_stage(agent)
+        if task and tstage:
+            task.update(STATUS.COMPLETED)
+            tstage.inc_finished()
+        else:
+            log.debug(f"One of this is none! {task}, {tstage}")
+
+    def get_report(self, file_name):
+        """
+        :param file_name: name of the file sent by the agent.
+        :return: file descriptor to save the scan report.
+        """
+        try:
+            report_file = open(os.path.join(self.reports_path, file_name),
+                               "wb")
+            return report_file
+        except Exception as ex:
+            log.error(f"Unable to open report for {file_name}")
+            log.error(f"{ex}")
+            return None
