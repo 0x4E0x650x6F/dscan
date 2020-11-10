@@ -1,7 +1,9 @@
+import os
 import unittest
 import pickle
-from io import TextIOWrapper
+from io import TextIOWrapper, StringIO
 from io import BytesIO
+from os import DirEntry
 from unittest.mock import patch
 from unittest.mock import mock_open
 from unittest.mock import MagicMock
@@ -13,67 +15,63 @@ from dscan.models.scanner import Task, STATUS, DiscoveryStage, Stage, Context
 
 class FileSystemMockTestCase(unittest.TestCase):
 
-    def mopen(self, filename, mode):
-        if filename == 'fake/run/targets.work':
-            content = "192.168.10.0/24\n192.168.12.0/24\n10.100.1.0/24\n"
-            self.targets_mock = mock_open()
-            targets_data = MagicMock(spect=TextIOWrapper)
-            memory_file = TextIOWrapper(BytesIO(content.encode("utf-8")))
-            targets_data.__iter__.return_value = iter(content.split("\n"))
-            targets_data.readline = memory_file.readline
-            targets_data.read = memory_file.read
-            targets_data.seek = memory_file.seek
-            targets_data.tell = memory_file.tell
-            self.targets_mock.return_value = targets_data
-            return self.targets_mock.return_value
-        elif filename == 'fake/run/current.trace':
-            content = b""
-            if mode == 'wb':
-                return mock_open().return_value
-            else:
-                return mock_open(read_data=content).return_value
-        else:
-            raise FileNotFoundError(filename)
+    def build_mock(self, data):
+        handle = MagicMock(spect=open)
+        handle.__enter__.return_value = handle
+        handle.__exit__.return_value = False
+        handle.__iter__.side_effect = data.__iter__
+        handle.__next__.side_effect = data.__next__
+        handle.readline = data.readline
+        handle.read = data.read
+        handle.seek = data.seek
+        handle.tell = data.tell
+        handle.write = data.write
+        handle.writelines = data.writelines
+        return handle
 
     def setUp(self) -> None:
-        patcher = patch('builtins.open', new=self.mopen)
-        os_isfile = patch('os.path.isfile')
-        os_access = patch('os.access')
-        os_access.return_value = True
-        os_isfile.return_value = True
-        self.targets_mock = patcher.start()
-        os_isfile.start()
-        os_access.start()
-        self.obj_file = File('fake/run/targets.work')
-        self.addCleanup(patcher.stop)
-        self.addCleanup(os_isfile.stop)
-        self.addCleanup(os_access.stop)
+        mos_isfile = patch('os.path.isfile')
+        mos_stat = patch("os.stat")
+        mos_access = patch('os.access')
+        mos_access.return_value = True
+        mos_isfile.return_value = True
+        mos_isfile.start()
+        mos_access.start()
+        mos_stat = mos_stat.start()
+        mos_stat.return_value = Mock(st_size=35)
+        self.addCleanup(mos_isfile.stop)
+        self.addCleanup(mos_access.stop)
+        self.addCleanup(mos_stat.stop)
 
 
 class TestStateFullFile(FileSystemMockTestCase):
 
-    @patch("os.stat")
-    def test_open(self, os_stat):
-        os_stat.return_value = Mock(st_size=35)
-        self.obj_file.open()
-        self.assertTrue(True, self.obj_file.exists())
-        self.assertTrue(True, self.obj_file.readable())
-        self.assertEqual(3, self.obj_file.nlines)
-        self.assertEqual(3, len(self.obj_file))
-        line = self.obj_file.readline()
-        self.assertEqual('192.168.10.0/24', line)
-        self.assertEqual(1, self.obj_file.lineno)
-        self.assertEqual(len('192.168.10.0/24\n'), self.obj_file.loc)
-        self.obj_file.close()
+    def setUp(self) -> None:
+        super(TestStateFullFile, self).setUp()
+        mopen = patch('builtins.open', spec=open)
+        self.file_mock = mopen.start()
+        self.file_mock.return_value = self.build_mock(
+            StringIO("192.168.10.0/24\n192.168.12.0/24\n10.100.1.0/24\n"))
+        self.targets_file = File('fake/run/targets.work')
+        self.targets_file.open()
+        self.addCleanup(mopen.stop)
 
-    @patch("os.stat")
-    def test_serialize(self, os_stat):
-        os_stat.return_value = Mock(st_size=35)
-        self.obj_file.open()
-        line = self.obj_file.readline()
+    def test_open(self):
+        self.assertTrue(True, self.targets_file.exists())
+        self.assertTrue(True, self.targets_file.readable())
+        self.assertEqual(3, self.targets_file.nlines)
+        self.assertEqual(3, len(self.targets_file))
+        line = self.targets_file.readline()
         self.assertEqual('192.168.10.0/24', line)
-        self.assertEqual(1, self.obj_file.lineno)
-        nobj_file = pickle.loads(pickle.dumps(self.obj_file))
+        self.assertEqual(1, self.targets_file.lineno)
+        self.assertEqual(len('192.168.10.0/24\n'), self.targets_file.loc)
+        self.targets_file.close()
+
+    def test_serialize(self):
+        line = self.targets_file.readline()
+        self.assertEqual('192.168.10.0/24', line)
+        self.assertEqual(1, self.targets_file.lineno)
+        nobj_file = pickle.loads(pickle.dumps(self.targets_file))
         line = nobj_file.readline()
         self.assertEqual("192.168.12.0/24", line)
         self.assertEqual(2, nobj_file.lineno)
@@ -106,13 +104,34 @@ class TestTasks(unittest.TestCase):
 class TestRuntimeContext(FileSystemMockTestCase):
 
     def setUp(self) -> None:
+        outdir = "fake/reports"
+        self.data_path = os.path.join(os.path.dirname(__file__), 'data')
+
+        with open(os.path.join(self.data_path,
+                                     "discovery-nonstandar.xml")) as f:
+            self.report1 = StringIO(f.read())
+
+        with open(os.path.join(self.data_path, "discovery-nonstandard.xml"))\
+                as f:
+            self.report2 = StringIO(f.read())
+
+        patch_scandir = patch('os.scandir')
+        scandir_mock = patch_scandir.start()
+        mock_direntry1 = Mock(spec=DirEntry)
+        mock_direntry1.name = "discovery-nonstandar.xml"
+        mock_direntry1.path = os.path.join(outdir, "discovery-nonstandar.xml")
+        mock_direntry2 = Mock(spec=DirEntry)
+        mock_direntry2.name= "discovery-nonstandard.xml"
+        mock_direntry2.path= os.path.join(outdir, "discovery-nonstandard.xml")
+        scandir_mock.return_value = iter([mock_direntry1, mock_direntry2])
+
         super(TestRuntimeContext, self).setUp()
         targets_path = "fake/run/targets.work"
         options = "-sS -n -p22"
-        outdir = "fake/reports"
-        ltargets_path = "fake/run/targets.work"
+
+        ltargets_path = "fake/run/live_hosts.work"
         resume_path = "fake/run/current.trace"
-        
+
         self.mock_server_config = MagicMock(spect=ServerConfig)
         self.mock_server_config.rundir = "fake/run"
         self.mock_server_config.queue_path = targets_path
@@ -120,36 +139,162 @@ class TestRuntimeContext(FileSystemMockTestCase):
         self.mock_server_config.resume_path = resume_path
         self.mock_server_config.stage_list = [
             DiscoveryStage(targets_path, options, outdir, ltargets_path),
-            Stage("stage1", ltargets_path, options),
-            Stage("stage2", ltargets_path, options)
+            Stage("stage1", ltargets_path, options, outdir),
+            Stage("stage2", ltargets_path, options, outdir)
         ]
+        self.mock_server_config.save_context = ServerConfig.save_context
         self.mock_server_config.outdir = outdir
+        self.addCleanup(patch_scandir.stop)
+        self.shared = StringIO()
+        self.targets = StringIO('172.16.71.132\n172.16.71.133\n')
+        self.mocks = {
+            "fake/run/targets.work": self.targets,
+            "fake/reports/discovery-nonstandar.xml": self.report1,
+            "fake/reports/discovery-nonstandard.xml": self.report2,
+            "fake/run/live_hosts.work": self.shared,
+            "fake/run/live_hosts.work": self.shared
+        }
+
+    def side_effect(self, name, mode="r"):
+        if name == "fake/run/live_hosts.work":
+            self.shared.seek(0)
+        return self.build_mock(self.mocks[name])
+
+    def check_tasks(self, task_data, task, stage_name, nactive,
+                    expected_target, expected_nactive=1):
+        options, target = task_data
+        self.assertIsNotNone(task_data)
+        self.assertEqual(stage_name, task.stage_name)
+        self.assertEqual(expected_target, target)
+        self.assertEqual("-sS -n -p22", options)
+        self.assertEqual(STATUS.SCHEDULED, task.status)
+        self.assertEqual(expected_nactive, nactive)
+
+    @patch('builtins.open', spec=open)
+    def test_context_full_flow(self, mock_file):
+        live_targets = StringIO()
+        mock_file.side_effect = self.side_effect
+        context = Context(self.mock_server_config)
+        self.assertEqual(3, len(context.stage_list))
+
+        agent = "127.0.0.1:1010"
+        # starts with stage 1 discovery
+        task_data = context.pop("127.0.0.1:1010")
+        task = context.active.get("127.0.0.1:1010")
+        nactive = len(context.active)
+        self.check_tasks(task_data, task, "discovery", nactive,
+                         "172.16.71.132")
+
+        context.completed("127.0.0.1:1010")
+        # stage 1 discovery target 2
+        task_data = context.pop("127.0.0.1:1010")
+        task = context.active.get("127.0.0.1:1010")
+        nactive = len(context.active)
+        self.check_tasks(task_data, task, "discovery", nactive,
+                         "172.16.71.133")
+        context.completed("127.0.0.1:1010")
+
+        # stage 1
+        live_targets.seek(0)
+        task_data = context.pop("127.0.0.1:1010")
+        task = context.active.get("127.0.0.1:1010")
+        nactive = len(context.active)
+        self.check_tasks(task_data, task, "stage1", nactive,
+                         "172.16.71.132/31")
+
+        # if another agent pulls now should be 2 active and stage 2 should
+        # start
+        task_data = context.pop("127.0.0.2:1010")
+        task = context.active.get("127.0.0.2:1010")
+        nactive = len(context.active)
+        self.check_tasks(task_data, task, "stage2", nactive,
+                         "172.16.71.132/31", 2)
+        self.assertIsNone(context.pop("127.0.0.1:1010"))
 
     @patch("os.stat")
-    def test_context(self, os_stat):
+    def test_discovery_inc_stage(self, os_stat):
         os_stat.return_value = Mock(st_size=35)
         context = Context(self.mock_server_config)
         self.assertEqual(3, len(context.stage_list))
-        expected_targets = ['192.168.10.0/24',
-                            '192.168.12.0/24',
-                            '10.100.1.0/24'
-                            ]
-        expected_stage_names = [
-            "discovery", "stage1", "stage2"
+        for i in range(3):
+            context.pop("127.0.0.1:1010")
+        self.assertIsNone(context.pop("127.0.0.1:1010"))
+
+    @patch("os.stat")
+    def test_interruption(self, os_stat):
+        agent = "127.0.0.1:1010"
+        os_stat.return_value = Mock(st_size=35)
+        context = Context(self.mock_server_config)
+        _ = context.pop(agent)
+        context.interrupted(agent)
+        self.assertEqual(1, len(context.pending))
+        _ = context.pop(agent)
+        self.assertEqual(0, len(context.pending))
+
+    @patch("os.stat")
+    def test_status_update(self, os_stat):
+        agent = "127.0.0.1:1010"
+        os_stat.return_value = Mock(st_size=35)
+        context = Context(self.mock_server_config)
+        _ = context.pop(agent)
+        test_cases = [
+            ("running", STATUS.RUNNING),
+            ("downloading", STATUS.DOWNLOADING),
+            ("completed", STATUS.COMPLETED),
+            ("interrupted", STATUS.INTERRUPTED),
         ]
-        for stage_idx in range(3):
-            for target_idx in range(3):
-                task = context.pop_target("127.0.0.1:1010")
-                self.assertIsNotNone(task)
-                self.assertEqual(expected_stage_names[stage_idx],
-                                 task.stage_name)
-                self.assertEqual(expected_targets[target_idx], task.target)
-                self.assertEqual("-sS -n -p22", task.options)
-                self.assertEqual(STATUS.SCHEDULED, task.status)
-                self.assertEqual(1, len(context.active))
-                self.assertEqual(task, context.active.get("127.0.0.1:1010"))
-                if stage_idx == 0:
-                    context.completed("127.0.0.1:1010")
+        for name, expected in test_cases:
+            method = getattr(context, name)
+            method(agent)
+            task = context.active.get(agent)
+            if name == "interrupted":
+                self.assertEqual(None, task)
+                self.assertEqual(1, len(context.pending))
+                task = context.pending.pop(0)
+            self.assertEqual(expected, task.status)
+
+    @patch("os.stat")
+    def test_context_resume(self, os_stat):
+        os_stat.return_value = Mock(st_size=35)
+        agent1 = "127.0.0.1:1010"
+        agent2 = "127.0.0.2:1010"
+        context = Context(self.mock_server_config)
+        task1 = context.pop(agent1)
+        task2 = context.pop(agent2)
+        context.running(agent1)
+        with patch('builtins.open', mock_open()) as mock_restore:
+            handle = mock_restore.return_value
+            self.mock_server_config.save_context(self.mock_server_config,
+                                                 context)
+            mock_restore.assert_any_call('fake/run/current.trace', "wb")
+            self.assertEqual(handle.write.call_count, 1)
+
+        restored_ctx = Context.create(self.mock_server_config)
+        self.assertEqual(context.cstage_name, restored_ctx.cstage_name)
+        self.assertEqual(len(context.stage_list), len(restored_ctx.stage_list))
+        self.assertEqual(0, len(restored_ctx.active))
+        self.assertEqual(context.reports_path, restored_ctx.reports_path)
+        self.assertEqual(2, len(restored_ctx.pending))
+        rtask1 = restored_ctx.pop(agent1)
+        self.assertEqual(task1, rtask1)
+        self.assertEqual(1, len(restored_ctx.active))
+        rtask2 = restored_ctx.pop(agent2)
+        self.assertEqual(task2, rtask2)
+        self.assertEqual(2, len(restored_ctx.active))
+        self.assertIsNotNone(restored_ctx._lock)
+        restored_ctx.completed(agent1)
+        restored_ctx.pop(agent1)
+        restored_ctx.completed(agent1)
+        restored_ctx.completed(agent2)
+        ltask = restored_ctx.pop(agent2)
+        self.assertIsNotNone(ltask)
+        self.assertEqual("stage1", restored_ctx.cstage_name)
+
+    @patch("os.stat")
+    def test_create(self, os_stat):
+        os_stat.return_value = Mock(st_size=0)
+        ctx = Context.create(self.mock_server_config)
+        self.assertIsNotNone(ctx)
 
 
 if __name__ == '__main__':

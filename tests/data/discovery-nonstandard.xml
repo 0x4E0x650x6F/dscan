@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<?xml-stylesheet href="file:///opt/local/bin/../share/nmap/nmap.xsl" type="text/xsl"?>
+<!-- Nmap 7.70 scan initiated Fri Jul 20 16:13:19 2018 as: nmap -PN -sV -A -p9080 -oX discovery-nonstandard.xml 172.16.71.133 -->
+<nmaprun scanner="nmap" args="nmap -PN -sV -A -p9080 -oX tomcat-nonstandard.xml 172.16.71.133" start="1532099599" startstr="Fri Jul 20 16:13:19 2018" version="7.70" xmloutputversion="1.04">
+<scaninfo type="syn" protocol="tcp" numservices="1" services="9080"/>
+<verbose level="0"/>
+<debugging level="0"/>
+<host starttime="1532099599" endtime="1532099607"><status state="up" reason="arp-response" reason_ttl="0"/>
+<address addr="172.16.71.133" addrtype="ipv4"/>
+<address addr="00:0C:29:B2:7C:00" addrtype="mac" vendor="VMware"/>
+<hostnames>
+</hostnames>
+<ports><port protocol="tcp" portid="9080"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="http" product="Apache Tomcat/Coyote JSP engine" version="1.0" method="probed" conf="10"><cpe>cpe:/a:apache:coyote_http_connector:1.0</cpe></service><script id="http-cookie-flags" output="&#xa;  /: &#xa;    JSESSIONID: &#xa;      httponly flag not set"><table key="/">
+<table key="JSESSIONID">
+<elem>httponly flag not set</elem>
+</table>
+</table>
+</script><script id="http-methods" output="&#xa;  Potentially risky methods: PUT DELETE TRACE"><table key="Potentially risky methods">
+<elem>PUT</elem>
+<elem>DELETE</elem>
+<elem>TRACE</elem>
+</table>
+</script><script id="http-server-header" output="Apache Coyote/1.0"><elem>Apache Coyote/1.0</elem>
+</script><script id="http-title" output="Apache Tomcat/4.1.10-LE-jdk14&#xa;Requested resource was http://172.16.71.133:9080/index.jsp"><elem key="title">Apache Tomcat/4.1.10-LE-jdk14</elem>
+<elem key="redirect_url">http://172.16.71.133:9080/index.jsp</elem>
+</script></port>
+</ports>
+<os><portused state="open" proto="tcp" portid="9080"/>
+<portused state="closed" proto="udp" portid="36841"/>
+<osmatch name="Linux 3.2 - 4.9" accuracy="100" line="65105">
+<osclass type="general purpose" vendor="Linux" osfamily="Linux" osgen="3.X" accuracy="100"><cpe>cpe:/o:linux:linux_kernel:3</cpe></osclass>
+<osclass type="general purpose" vendor="Linux" osfamily="Linux" osgen="4.X" accuracy="100"><cpe>cpe:/o:linux:linux_kernel:4</cpe></osclass>
+</osmatch>
+</os>
+<uptime seconds="6148" lastboot="Fri Jul 20 14:30:59 2018"/>
+<distance value="1"/>
+<tcpsequence index="264" difficulty="Good luck!" values="58855C3E,D4454496,63CB2590,1AB7C,A2E0FE1,17BEA463"/>
+<ipidsequence class="All zeros" values="0,0,0,0,0,0"/>
+<tcptssequence class="1000HZ" values="5DCB84,5DCBED,5DCC56,5DCCC0,5DCD29,5DCD92"/>
+<trace>
+<hop ttl="1" ipaddr="172.16.71.133" rtt="0.49"/>
+</trace>
+<times srtt="491" rttvar="153" to="100000"/>
+</host>
+<runstats><finished time="1532099607" timestr="Fri Jul 20 16:13:27 2018" elapsed="8.20" summary="Nmap done at Fri Jul 20 16:13:27 2018; 1 IP address (1 host up) scanned in 8.20 seconds" exit="success"/><hosts up="1" down="0" total="1"/>
+</runstats>
+</nmaprun>

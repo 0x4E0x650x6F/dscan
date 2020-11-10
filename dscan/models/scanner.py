@@ -9,8 +9,11 @@ scanner runtime models
 import os
 import ipaddress
 import hashlib
+import threading
+import pickle
 from enum import Enum
 from dscan import log
+from parsers import TargetOptimization, ReportsParser
 
 
 class ServerConfig:
@@ -32,21 +35,21 @@ class ServerConfig:
         with the user options
         """
         self.outdir = outdir
-        self.rundir = os.path.join(
-            options.name, config.get(*self.SERVER[0:2:1]))
-        self.queue_path = os.path.join(
-            options.name, config.get(*self.SERVER[0:3:2]))
-        self.ltargets_path = os.path.join(
-            options.name, config.get(*self.SERVER[0:4:3]))
-        self.resume_path = os.path.join(
-            options.name, config.get(*self.SERVER[0:5:4]))
+        self.rundir = os.path.abspath(os.path.join(
+            options.name, config.get(*self.SERVER[0:2:1])))
+        self.queue_path = os.path.abspath(os.path.join(
+            options.name, config.get(*self.SERVER[0:3:2])))
+        self.ltargets_path = os.path.abspath(os.path.join(
+            options.name, config.get(*self.SERVER[0:4:3])))
+        self.resume_path = os.path.abspath(os.path.join(
+            options.name, config.get(*self.SERVER[0:5:4])))
         self.host = options.b
         os.makedirs(self.rundir, exist_ok=True)
         # init scan stages !
         self.__create_stages(dict(config.items('nmap-scan')))
         # set cert properties
-        self.sslcert = config.get(*self.SSL_CERTS[0:2:1])
-        self.sslkey = config.get(*self.SSL_CERTS[0:3:2])
+        self.sslcert = os.path.abspath(config.get(*self.SSL_CERTS[0:2:1]))
+        self.sslkey = os.path.abspath(config.get(*self.SSL_CERTS[0:3:2]))
         digest: hashlib.sha512 = hashlib.sha512()
         try:
             with open(self.sslcert, 'rt') as cert:
@@ -65,7 +68,7 @@ class ServerConfig:
                                                       self.ltargets_path))
             else:
                 self.stage_list.append(Stage(name, self.ltargets_path,
-                                             options))
+                                             options, self.outdir))
 
     def target_optimization(self, targets):
         """
@@ -75,21 +78,18 @@ class ServerConfig:
         """
         assert len(targets) != 0, "Empty target list"
         if not os.path.isfile(self.resume_path):
-            nets = []
-            try:
-                for target in targets:
-                    nets.append(ipaddress.ip_network(target.strip()))
-            except (TypeError, ValueError):
-                log.error("Error optimizing targets")
-                pass
-            with open(self.queue_path, 'wt') as qfile:
-                for net in ipaddress.collapse_addresses(nets):
-                    if net.prefixlen < 24:
-                        subs = map(lambda n: "%s\n" % n.with_prefixlen,
-                                   net.subnets(new_prefix=24))
-                        qfile.writelines(subs)
-                    else:
-                        qfile.write("%s\n" % net.with_prefixlen)
+            queue_optimization = TargetOptimization(self.queue_path)
+            queue_optimization.save(targets)
+
+    def save_context(self, ctx):
+        """
+        Serializes the context to resume later.
+        :param ctx: instance of `Context`
+        :type ctx: `Context`
+        """
+        log.info(f"Saving the current context {self.resume_path}")
+        with open(self.resume_path, 'wb') as rfile:
+            pickle.dump(ctx, rfile)
 
 
 class Config:
@@ -112,7 +112,8 @@ class Config:
         """
         self.port = options.p
         self.dataPath = os.path.join(os.path.dirname(__file__), "data")
-        self.outdir = os.path.join(options.name, config.get(*self.BASE))
+        self.outdir = os.path.abspath(os.path.join(options.name, config.get(
+            *self.BASE)))
         os.makedirs(self.outdir, exist_ok=True)
         self.config = None
         if options.cmd == 'srv':
@@ -138,7 +139,7 @@ class File:
         :param path:
         :type path: `str` File path
         """
-        self._path = os.path.normpath(path)
+        self._path = path
         self._fd = None
         self.nlines = 0
         self.lineno = 0
@@ -160,9 +161,7 @@ class File:
         self.loc = self._fd.tell()
         if not line:
             return None
-        if line.endswith('\n'):
-            line = line[:-1]
-        return line
+        return line.strip()
 
     def isempty(self):
         """
@@ -232,6 +231,7 @@ class File:
         self.__dict__.update(state)
         # Restore the previously opened file's state.
         log.info(f"restoring file: {self._path} loc:{self.loc} state")
+        print(f"restoring file: {self._path} loc:{self.loc} state")
         fd = open(self._path, self.mode)
 
         # set the file to the prev location.
@@ -297,7 +297,7 @@ class Task:
         assert isinstance(status, STATUS)
         self.status = status
 
-    def values(self):
+    def as_tuple(self):
         """
         returns a tuple with the target and scan options.
         :return: tuple options, target
@@ -308,13 +308,14 @@ class Task:
 
 class Stage:
 
-    def __init__(self, stage_name, targets_path, options):
+    def __init__(self, stage_name, targets_path, options, outdir):
         assert targets_path, "Invalid targets file Name"
         assert stage_name, "Invalid stage Name"
         self.targets_path = targets_path
         self.name = stage_name
         self.targets = File(self.targets_path)
         self.options = options
+        self.reports_path = outdir
         self.ftargets = 0
 
     def next_task(self):
@@ -327,7 +328,11 @@ class Stage:
     def inc_finished(self):
         self.ftargets += 1
 
-    def process_results(self, report):
+    def process_results(self):
+        """
+        Meant to be overwritten, like for example stages like ping sweep aka
+        discovery.
+        """
         pass
 
     @property
@@ -348,12 +353,13 @@ class Stage:
 class DiscoveryStage(Stage):
 
     def __init__(self, targets_path, options, outdir, ltargets_path):
-        super().__init__("discovery", targets_path, options)
+        super().__init__("discovery", targets_path, options, outdir)
         self.ltargets_path = ltargets_path
-        self.reports_path = outdir
 
-    def process_results(self, report):
-        pass
+    def process_results(self):
+        results_parser = ReportsParser(self.reports_path, 'discovery-*.xml')
+        live_queue = TargetOptimization(self.ltargets_path)
+        live_queue.save(results_parser.hosts_up())
 
 
 class Context:
@@ -362,6 +368,7 @@ class Context:
     execution flow and inherent logic.
     Acts as a proxy between the active stages and the `stage` implementation.
     """
+
     def __init__(self, options):
         self.stage_list = list(options.stage_list)
         self.cstage_name = None
@@ -369,6 +376,93 @@ class Context:
         self.reports_path = options.outdir
         self.active = {}
         self.pending = []
+        self._lock = threading.Lock()
+
+    def pop(self, agent):
+        """
+        Gets the next `Task` from the current Active Stage, if their are no
+        pending `Tasks` to be executed.
+        Pending tasks are tasks that are canceled or restored from a previous
+        interrupted session.
+        If a stage is finished (no more targets), the next stage will take
+        another stage from the list until its finished!
+        :param agent: str with ipaddress and port in ip:port format
+        :return: A target to scan! `task`
+        :rtype: `tuple`
+        """
+        with self._lock:
+            task = None
+            if len(self.pending) > 0:
+                task = self.pending.pop(0)
+            else:
+                cstage = self.__cstage()
+                if cstage:
+                    task = cstage.next_task()
+                    if not task:
+                        # the only stage that needs to be finished
+                        # to proceed is
+                        # discovery as the other stages need the
+                        # list of live hosts
+                        if cstage.name != "discovery" or cstage.isfinished:
+                            if cstage.isfinished:
+                                cstage.process_results()
+                                cstage.close()
+                            cstage = self.__cstage(True)
+                            if cstage:
+                                task = cstage.next_task()
+
+            # if we have a valid task save it in the active collection
+            if task:
+                self.active.update({agent: task})
+                # the consumers only need scan related information...
+                return task.as_tuple()
+
+    def _update_task_status(self, agent, status):
+        """
+        Internal method updates  a task of a given stage status, its also
+        responsible for managing the interrupted tasks.
+        :param agent: str with ipaddress and port in ip:port format
+        :param status: `STATUS` value to change.
+        """
+        with self._lock:
+            task, tstage = self.__find_task_stage(agent)
+            if task and tstage:
+                task.update(status)
+                if status == STATUS.COMPLETED:
+                    tstage.inc_finished()
+                if status == status.INTERRUPTED:
+                    log.info(f"Scan of {task.target} running on {agent} was "
+                             f"interrupted")
+                    self.pending.append(task)
+                    del self.active[agent]
+            else:
+                log.debug(f"One of this is none! {task}, {tstage}")
+
+    def completed(self, agent):
+        self._update_task_status(agent, STATUS.COMPLETED)
+
+    def downloading(self, agent):
+        self._update_task_status(agent, STATUS.DOWNLOADING)
+
+    def interrupted(self, agent):
+        self._update_task_status(agent, STATUS.INTERRUPTED)
+
+    def running(self, agent):
+        self._update_task_status(agent, STATUS.RUNNING)
+
+    def get_report(self, file_name):
+        """
+        :param file_name: name of the file sent by the agent.
+        :return: file descriptor to save the scan report.
+        """
+        try:
+            report_file = open(os.path.join(self.reports_path, file_name),
+                               "wb")
+            return report_file
+        except Exception as ex:
+            log.error(f"Unable to open report for {file_name}")
+            log.error(f"{ex}")
+            return None
 
     def __cstage(self, force_next=False):
         """
@@ -401,59 +495,43 @@ class Context:
             tstage = self.active_stages.get(task.stage_name, None)
         return task, tstage
 
-    def pop_target(self, agent):
+    @classmethod
+    def create(cls, options):
         """
-        Gets the next `Task` from the current Active Stage, if their are no
-        pending `Tasks` to be executed.
-        Pending tasks are tasks that are canceled or restored from a previous
-        interrupted session.
-        If a stage is finished (no more targets), the next stage will take
-        another stage from the list until its finished!
-        :param agent: str with ipaddress and port in ip:port format
-        :return: A target to scan! `task`
-        :rtype: `Task`
+        :param options: instance of `ServerConfig`
+        :type options: ´ServerConfig´
+        :return: instance of `Context`
+        :rtype: ´Context`
         """
-        task = None
-        if len(self.pending) > 0:
-            task = self.pending.pop(0)
+        rpath = options.resume_path
+        if os.path.isfile(rpath) and os.stat(rpath).st_size > 0:
+            log.info("Found resume file, loading...!")
+            with open(options.resume_path, 'rb') as rfile:
+                ctx = pickle.load(rfile)
+                return ctx
         else:
-            cstage = self.__cstage()
-            if cstage:
-                task = cstage.next_task()
-                if not task:
-                    # the only stage that needs to be finished to proceed is
-                    # discovery as the other stages need the list of live hosts
-                    if cstage.name != "discovery" or cstage.isfinished:
-                        if cstage.isfinished:
-                            cstage.close()
-                        cstage = self.__cstage(True)
-                        if cstage:
-                            task = cstage.next_task()
+            return cls(options)
 
-        # if we have a valid task save it in the active collection
-        if task:
-            self.active.update({agent: task})
+    def __getstate__(self):
+        with self._lock:
+            log.info("saving context state")
+            state = self.__dict__.copy()
+            for task in state['active'].values():
+                task.update(STATUS.INTERRUPTED)
+                state['pending'].append(task)
 
-        return task
+            # close file descriptors on all active stages
+            for active_stage in state['active_stages'].values():
+                active_stage.close()
 
-    def completed(self, agent):
-        task, tstage = self.__find_task_stage(agent)
-        if task and tstage:
-            task.update(STATUS.COMPLETED)
-            tstage.inc_finished()
-        else:
-            log.debug(f"One of this is none! {task}, {tstage}")
+            state['active'] = {}
+            # Remove the unpickable entries.
+            del state['_lock']
+            return state
 
-    def get_report(self, file_name):
-        """
-        :param file_name: name of the file sent by the agent.
-        :return: file descriptor to save the scan report.
-        """
-        try:
-            report_file = open(os.path.join(self.reports_path, file_name),
-                               "wb")
-            return report_file
-        except Exception as ex:
-            log.error(f"Unable to open report for {file_name}")
-            log.error(f"{ex}")
-            return None
+    def __setstate__(self, state):
+        # restore the previous state, needed due to the existence of non
+        # serializable objects
+        self.__dict__.update(state)
+        log.info("Restoring context state")
+        self._lock = threading.Lock()
