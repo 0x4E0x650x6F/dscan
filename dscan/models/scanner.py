@@ -231,7 +231,6 @@ class File:
         self.__dict__.update(state)
         # Restore the previously opened file's state.
         log.info(f"restoring file: {self._path} loc:{self.loc} state")
-        print(f"restoring file: {self._path} loc:{self.loc} state")
         fd = open(self._path, self.mode)
 
         # set the file to the prev location.
@@ -507,7 +506,10 @@ class Context:
         if os.path.isfile(rpath) and os.stat(rpath).st_size > 0:
             log.info("Found resume file, loading...!")
             with open(options.resume_path, 'rb') as rfile:
-                ctx = pickle.load(rfile)
+                # i had to make this to make this testable with mocks!
+                # load with file didn't work, some how!
+                data = rfile.read()
+                ctx = pickle.loads(data)
                 return ctx
         else:
             return cls(options)

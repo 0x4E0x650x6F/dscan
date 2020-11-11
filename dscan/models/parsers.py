@@ -34,9 +34,8 @@ class ReportsParser:
 
     def __walk(self):
         """
-        :param attrib_filter: callback function that will extract the wanted
         information.
-        :return: A list with the filtered values
+        :yield: A list with the filtered values
         :rtype: `list`
         """
         for report in os.scandir(self.path):
@@ -81,7 +80,8 @@ class TargetOptimization:
             # find consecutive ip address ranges.
             try:
                 for first, last in ipaddress._find_address_range(ips):
-                    ip_range = list(ipaddress.summarize_address_range(first, last))
+                    ip_range = list(ipaddress.summarize_address_range(first,
+                                                                      last))
                     # if the number of ranges is more than one network in cidr
                     # format then the glob format x.x.x.x-y is more efficient,
                     # since nmap supports this format.
@@ -89,6 +89,6 @@ class TargetOptimization:
                         qfile.write(f"{first}-{last.exploded.split('.')[3]}\n")
                     else:
                         qfile.write(f"{ip_range.pop().with_prefixlen}\n")
-            except Exception:
+            except StopIteration:
                 log.error("No hosts!")
                 pass

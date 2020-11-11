@@ -1,11 +1,9 @@
 import os
 import unittest
 import pickle
-from io import TextIOWrapper, StringIO
-from io import BytesIO
+from io import StringIO, BytesIO
 from os import DirEntry
 from unittest.mock import patch
-from unittest.mock import mock_open
 from unittest.mock import MagicMock
 from unittest.mock import Mock
 from dscan.models.scanner import ServerConfig
@@ -15,14 +13,24 @@ from dscan.models.scanner import Task, STATUS, DiscoveryStage, Stage, Context
 
 class FileSystemMockTestCase(unittest.TestCase):
 
-    def build_mock(self, data):
+    @staticmethod
+    def build_mock(data):
+        def read(size=-1):
+            if size:
+                if isinstance(data, BytesIO):
+                    return data.getvalue()
+                else:
+                    return data.read(size)
+            else:
+                return data.read()
+
         handle = MagicMock(spect=open)
         handle.__enter__.return_value = handle
         handle.__exit__.return_value = False
         handle.__iter__.side_effect = data.__iter__
         handle.__next__.side_effect = data.__next__
         handle.readline = data.readline
-        handle.read = data.read
+        handle.read = read
         handle.seek = data.seek
         handle.tell = data.tell
         handle.write = data.write
@@ -121,8 +129,8 @@ class TestRuntimeContext(FileSystemMockTestCase):
         mock_direntry1.name = "discovery-nonstandar.xml"
         mock_direntry1.path = os.path.join(outdir, "discovery-nonstandar.xml")
         mock_direntry2 = Mock(spec=DirEntry)
-        mock_direntry2.name= "discovery-nonstandard.xml"
-        mock_direntry2.path= os.path.join(outdir, "discovery-nonstandard.xml")
+        mock_direntry2.name = "discovery-nonstandard.xml"
+        mock_direntry2.path = os.path.join(outdir, "discovery-nonstandard.xml")
         scandir_mock.return_value = iter([mock_direntry1, mock_direntry2])
 
         super(TestRuntimeContext, self).setUp()
@@ -145,19 +153,22 @@ class TestRuntimeContext(FileSystemMockTestCase):
         self.mock_server_config.save_context = ServerConfig.save_context
         self.mock_server_config.outdir = outdir
         self.addCleanup(patch_scandir.stop)
-        self.shared = StringIO()
+        self.live_targets = StringIO()
+        self.resume = BytesIO()
         self.targets = StringIO('172.16.71.132\n172.16.71.133\n')
         self.mocks = {
             "fake/run/targets.work": self.targets,
             "fake/reports/discovery-nonstandar.xml": self.report1,
             "fake/reports/discovery-nonstandard.xml": self.report2,
-            "fake/run/live_hosts.work": self.shared,
-            "fake/run/live_hosts.work": self.shared
+            "fake/run/live_hosts.work": self.live_targets,
+            "fake/run/current.trace": self.resume
         }
 
     def side_effect(self, name, mode="r"):
-        if name == "fake/run/live_hosts.work":
-            self.shared.seek(0)
+        if name == "fake/run/live_hosts.work" or name \
+                == 'fake/run/current.trace':
+            self.live_targets.seek(0)
+            #self.resume.seek(0)
         return self.build_mock(self.mocks[name])
 
     def check_tasks(self, task_data, task, stage_name, nactive,
@@ -172,32 +183,30 @@ class TestRuntimeContext(FileSystemMockTestCase):
 
     @patch('builtins.open', spec=open)
     def test_context_full_flow(self, mock_file):
-        live_targets = StringIO()
         mock_file.side_effect = self.side_effect
         context = Context(self.mock_server_config)
         self.assertEqual(3, len(context.stage_list))
 
         agent = "127.0.0.1:1010"
         # starts with stage 1 discovery
-        task_data = context.pop("127.0.0.1:1010")
-        task = context.active.get("127.0.0.1:1010")
+        task_data = context.pop(agent)
+        task = context.active.get(agent)
         nactive = len(context.active)
         self.check_tasks(task_data, task, "discovery", nactive,
                          "172.16.71.132")
 
-        context.completed("127.0.0.1:1010")
+        context.completed(agent)
         # stage 1 discovery target 2
-        task_data = context.pop("127.0.0.1:1010")
-        task = context.active.get("127.0.0.1:1010")
+        task_data = context.pop(agent)
+        task = context.active.get(agent)
         nactive = len(context.active)
         self.check_tasks(task_data, task, "discovery", nactive,
                          "172.16.71.133")
-        context.completed("127.0.0.1:1010")
+        context.completed(agent)
 
         # stage 1
-        live_targets.seek(0)
-        task_data = context.pop("127.0.0.1:1010")
-        task = context.active.get("127.0.0.1:1010")
+        task_data = context.pop(agent)
+        task = context.active.get(agent)
         nactive = len(context.active)
         self.check_tasks(task_data, task, "stage1", nactive,
                          "172.16.71.132/31")
@@ -211,19 +220,19 @@ class TestRuntimeContext(FileSystemMockTestCase):
                          "172.16.71.132/31", 2)
         self.assertIsNone(context.pop("127.0.0.1:1010"))
 
-    @patch("os.stat")
-    def test_discovery_inc_stage(self, os_stat):
-        os_stat.return_value = Mock(st_size=35)
+    @patch('builtins.open', spec=open)
+    def test_discovery_inc_stage(self, mock_file):
+        mock_file.side_effect = self.side_effect
         context = Context(self.mock_server_config)
         self.assertEqual(3, len(context.stage_list))
-        for i in range(3):
+        for i in range(2):
             context.pop("127.0.0.1:1010")
         self.assertIsNone(context.pop("127.0.0.1:1010"))
 
-    @patch("os.stat")
-    def test_interruption(self, os_stat):
+    @patch('builtins.open', spec=open)
+    def test_interruption(self, mock_file):
+        mock_file.side_effect = self.side_effect
         agent = "127.0.0.1:1010"
-        os_stat.return_value = Mock(st_size=35)
         context = Context(self.mock_server_config)
         _ = context.pop(agent)
         context.interrupted(agent)
@@ -231,10 +240,10 @@ class TestRuntimeContext(FileSystemMockTestCase):
         _ = context.pop(agent)
         self.assertEqual(0, len(context.pending))
 
-    @patch("os.stat")
-    def test_status_update(self, os_stat):
+    @patch('builtins.open', spec=open)
+    def test_status_update(self, mock_file):
+        mock_file.side_effect = self.side_effect
         agent = "127.0.0.1:1010"
-        os_stat.return_value = Mock(st_size=35)
         context = Context(self.mock_server_config)
         _ = context.pop(agent)
         test_cases = [
@@ -253,21 +262,18 @@ class TestRuntimeContext(FileSystemMockTestCase):
                 task = context.pending.pop(0)
             self.assertEqual(expected, task.status)
 
-    @patch("os.stat")
-    def test_context_resume(self, os_stat):
-        os_stat.return_value = Mock(st_size=35)
+    @patch('builtins.open', spec=open)
+    def test_context_resume(self, mock_file):
+        mock_file.side_effect = self.side_effect
         agent1 = "127.0.0.1:1010"
         agent2 = "127.0.0.2:1010"
         context = Context(self.mock_server_config)
         task1 = context.pop(agent1)
         task2 = context.pop(agent2)
         context.running(agent1)
-        with patch('builtins.open', mock_open()) as mock_restore:
-            handle = mock_restore.return_value
-            self.mock_server_config.save_context(self.mock_server_config,
-                                                 context)
-            mock_restore.assert_any_call('fake/run/current.trace', "wb")
-            self.assertEqual(handle.write.call_count, 1)
+        self.mock_server_config.save_context(self.mock_server_config,
+                                             context)
+        mock_file.assert_any_call('fake/run/current.trace', "wb")
 
         restored_ctx = Context.create(self.mock_server_config)
         self.assertEqual(context.cstage_name, restored_ctx.cstage_name)
@@ -283,11 +289,10 @@ class TestRuntimeContext(FileSystemMockTestCase):
         self.assertEqual(2, len(restored_ctx.active))
         self.assertIsNotNone(restored_ctx._lock)
         restored_ctx.completed(agent1)
-        restored_ctx.pop(agent1)
+        restored_ctx.completed(agent2)
+        ltask = restored_ctx.pop(agent1)
         restored_ctx.completed(agent1)
         restored_ctx.completed(agent2)
-        ltask = restored_ctx.pop(agent2)
-        self.assertIsNotNone(ltask)
         self.assertEqual("stage1", restored_ctx.cstage_name)
 
     @patch("os.stat")

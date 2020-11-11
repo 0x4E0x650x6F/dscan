@@ -2,8 +2,8 @@ import os
 import unittest
 from unittest.mock import patch, mock_open, call
 
-from dscan.models.parsers import ReportsParser, TargetOptimization
-
+from dscan.models.parsers import ReportsParser
+from dscan.models.parsers import TargetOptimization
 
 class TestReportsParsers(unittest.TestCase):
 
