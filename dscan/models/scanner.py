@@ -6,17 +6,57 @@ scanner.py
 scanner runtime models
 """
 
-import os
-import ipaddress
 import hashlib
-import threading
+import os
 import pickle
+import threading
 from enum import Enum
+
 from dscan import log
-from parsers import TargetOptimization, ReportsParser
+
+from .parsers import ReportsParser, TargetOptimization
+
+
+class Config:
+    """
+        Runtime configurations
+    """
+
+    BASE = (
+        'base', 'reports',
+    )
+
+    def __init__(self, config, options):
+        """
+        Holds the configuration parameters
+        used at runtime for both server and agent!
+        :param config: configparser with the configuration
+        :type config: `configparser.ConfigParser`
+        :param options: argument parser `argparse.ArgumentParser`
+        with the user options
+        """
+        self.port = options.p
+        self.dataPath = os.path.join(os.path.dirname(__file__), "data")
+        self.outdir = os.path.join(options.name, config.get(
+            *self.BASE))
+        os.makedirs(self.outdir, exist_ok=True)
+        self.config = None
+        if options.cmd == 'srv':
+            self.config = ServerConfig(config, options, self.outdir)
+        else:
+            self.host = options.s
+
+    def __getattr__(self, name):
+        if hasattr(self.config, name):
+            return getattr(self.config, name)
+        else:
+            raise AttributeError(f"invalid key {name}")
 
 
 class ServerConfig:
+    """
+    Server configuration parser.
+    """
     SERVER = (
         'server', 'stats', 'targets', 'live-targets', 'trace',
     )
@@ -35,21 +75,21 @@ class ServerConfig:
         with the user options
         """
         self.outdir = outdir
-        self.rundir = os.path.abspath(os.path.join(
-            options.name, config.get(*self.SERVER[0:2:1])))
-        self.queue_path = os.path.abspath(os.path.join(
-            options.name, config.get(*self.SERVER[0:3:2])))
-        self.ltargets_path = os.path.abspath(os.path.join(
-            options.name, config.get(*self.SERVER[0:4:3])))
-        self.resume_path = os.path.abspath(os.path.join(
-            options.name, config.get(*self.SERVER[0:5:4])))
+        self.rundir = os.path.join(
+            options.name, config.get(*self.SERVER[0:2:1]))
+        self.queue_path = os.path.join(
+            options.name, config.get(*self.SERVER[0:3:2]))
+        self.ltargets_path = os.path.join(
+            options.name, config.get(*self.SERVER[0:4:3]))
+        self.resume_path = os.path.join(
+            options.name, config.get(*self.SERVER[0:5:4]))
         self.host = options.b
         os.makedirs(self.rundir, exist_ok=True)
         # init scan stages !
         self.__create_stages(dict(config.items('nmap-scan')))
         # set cert properties
-        self.sslcert = os.path.abspath(config.get(*self.SSL_CERTS[0:2:1]))
-        self.sslkey = os.path.abspath(config.get(*self.SSL_CERTS[0:3:2]))
+        self.sslcert = config.get(*self.SSL_CERTS[0:2:1])
+        self.sslkey = config.get(*self.SSL_CERTS[0:3:2])
         digest: hashlib.sha512 = hashlib.sha512()
         try:
             with open(self.sslcert, 'rt') as cert:
@@ -90,42 +130,6 @@ class ServerConfig:
         log.info(f"Saving the current context {self.resume_path}")
         with open(self.resume_path, 'wb') as rfile:
             pickle.dump(ctx, rfile)
-
-
-class Config:
-    """
-        Runtime configurations
-    """
-
-    BASE = (
-        'base', 'reports',
-    )
-
-    def __init__(self, config, options):
-        """
-        Holds the configuration parameters
-        used at runtime for both server and agent!
-        :param config: configparser with the configuration
-        :type config: `configparser.ConfigParser`
-        :param options: argument parser `argparse.ArgumentParser`
-        with the user options
-        """
-        self.port = options.p
-        self.dataPath = os.path.join(os.path.dirname(__file__), "data")
-        self.outdir = os.path.abspath(os.path.join(options.name, config.get(
-            *self.BASE)))
-        os.makedirs(self.outdir, exist_ok=True)
-        self.config = None
-        if options.cmd == 'srv':
-            self.config = ServerConfig(config, options, self.outdir)
-        else:
-            self.host = options.s
-
-    def __getattr__(self, name):
-        if hasattr(self.config, name):
-            return getattr(self.config, name)
-        else:
-            raise AttributeError(f"invalid key {name}")
 
 
 class File:
@@ -302,7 +306,8 @@ class Task:
         :return: tuple options, target
         :rtype tuple:
         """
-        return self.options, self.target
+        return self.stage_name, self.status.name, self.target, \
+            self.options
 
 
 class Stage:
@@ -318,6 +323,11 @@ class Stage:
         self.ftargets = 0
 
     def next_task(self):
+        """
+        Get next target from the file
+        :return: Task.
+        :rtype: `Task`
+        """
         target = self.targets.readline()
         if target:
             return Task(self.name, self.options, target)
@@ -341,12 +351,19 @@ class Stage:
         else:
             return False
 
-    def close(self):
-        self.targets.close()
+    @property
+    def percentage(self):
+        if self.ftargets > 0:
+            return float(self.ftargets) / float(self.targets.nlines) * 100
+        else:
+            return float(0)
 
     def as_tuple(self):
-        return self.name, self.targets.nlines, self.targets.lineno, \
-               self.ftargets
+        return self.name, self.targets.nlines, self.ftargets, \
+               f"{self.percentage:.2f}%"
+
+    def close(self):
+        self.targets.close()
 
 
 class DiscoveryStage(Stage):
@@ -370,6 +387,7 @@ class Context:
 
     def __init__(self, options):
         self.stage_list = list(options.stage_list)
+        self.nstages = len(self.stage_list)
         self.cstage_name = None
         self.active_stages = {}
         self.reports_path = options.outdir
@@ -385,12 +403,25 @@ class Context:
         interrupted session.
         If a stage is finished (no more targets), the next stage will take
         another stage from the list until its finished!
-        :param agent: str with ipaddress and port in ip:port format
+        :param agent:
+        str with ipaddress and port in ip:port format, this allows the
+        server to manage multiple agents in one host.
+        to run multiple clients at once.
         :return: A target to scan! `task`
         :rtype: `tuple`
         """
         with self._lock:
             task = None
+            if agent in self.active:
+                # This exists to make shore we don't lose targets.
+                # this would be better if we knew how many tries a target
+                # had faced. TODO
+                log.info(f"Agent {agent} is requesting a new task with a "
+                         f"task in execution sending it again!")
+                task = self.active.get(agent)
+                task.update(STATUS.SCHEDULED)
+                return task.as_tuple()[2:]
+
             if len(self.pending) > 0:
                 task = self.pending.pop(0)
             else:
@@ -414,28 +445,7 @@ class Context:
             if task:
                 self.active.update({agent: task})
                 # the consumers only need scan related information...
-                return task.as_tuple()
-
-    def _update_task_status(self, agent, status):
-        """
-        Internal method updates  a task of a given stage status, its also
-        responsible for managing the interrupted tasks.
-        :param agent: str with ipaddress and port in ip:port format
-        :param status: `STATUS` value to change.
-        """
-        with self._lock:
-            task, tstage = self.__find_task_stage(agent)
-            if task and tstage:
-                task.update(status)
-                if status == STATUS.COMPLETED:
-                    tstage.inc_finished()
-                if status == status.INTERRUPTED:
-                    log.info(f"Scan of {task.target} running on {agent} was "
-                             f"interrupted")
-                    self.pending.append(task)
-                    del self.active[agent]
-            else:
-                log.debug(f"One of this is none! {task}, {tstage}")
+                return task.as_tuple()[2:]
 
     def completed(self, agent):
         self._update_task_status(agent, STATUS.COMPLETED)
@@ -462,6 +472,29 @@ class Context:
             log.error(f"Unable to open report for {file_name}")
             log.error(f"{ex}")
             return None
+
+    def _update_task_status(self, agent, status):
+        """
+        Internal method updates  a task of a given stage status, its also
+        responsible for managing the interrupted tasks.
+        :param agent: str with ipaddress and port in ip:port format
+        :param status: `STATUS` value to change.
+        """
+        with self._lock:
+            task, tstage = self.__find_task_stage(agent)
+            if task and tstage:
+                task.update(status)
+                if status == STATUS.COMPLETED:
+                    tstage.inc_finished()
+                    # clean the completed task
+                    del self.active[agent]
+                if status == status.INTERRUPTED:
+                    log.info(f"Scan of {task.target} running on {agent} was "
+                             f"interrupted")
+                    self.pending.append(task)
+                    del self.active[agent]
+            else:
+                log.debug(f"One of this is none! {task}, {tstage}")
 
     def __cstage(self, force_next=False):
         """
@@ -513,6 +546,25 @@ class Context:
                 return ctx
         else:
             return cls(options)
+
+    def tasks_status(self):
+        data = []
+        for agent, task in self.active.items():
+            data.append((agent, *task.as_tuple()[:3]))
+        return data
+
+    def active_stages_status(self):
+        data = []
+        for stage in self.active_stages.values():
+            data.append(stage.as_tuple())
+        return data
+
+    def ctx_status(self):
+        stage_comp = float(0)
+        for stage in self.active_stages.values():
+            stage_comp += stage.percentage
+        return [(self.nstages, len(self.pending), "{:.2f}%"
+                 .format((stage_comp / float(300) * 100)))]
 
     def __getstate__(self):
         with self._lock:

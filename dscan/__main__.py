@@ -4,7 +4,6 @@
 import argparse
 from datetime import datetime
 
-
 FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
 
 

@@ -1,4 +1,4 @@
-PROJECT_PATH=./
+PROJECT_PATH=./tests
 
 help:
 	@echo "    clean-pyc"
@@ -30,7 +30,7 @@ clean-build:
 	rm -rf *.egg-info
 
 isort:
-	isort --recursive $(PROJECT_PATH)
+	isort $(PROJECT_PATH)
 
 lint: isort
 	autopep8 --verbose --recursive --in-place --aggressive $(PROJECT_PATH)

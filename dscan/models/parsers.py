@@ -3,11 +3,12 @@ parsers.py
 parsers models, input ip address list collapse, or
 scanner results to parse.
 """
-import os
 import fnmatch
 import ipaddress
-from libnmap.parser import NmapParser
-from libnmap.parser import NmapParserException
+import os
+
+from libnmap.parser import NmapParser, NmapParserException
+
 from dscan import log
 
 
@@ -53,11 +54,13 @@ class TargetOptimization:
     them by either split big cidr like /8 /16 in /24 or in rage format
     192.168.10.1-4.
     """
+
     def __init__(self, fpath, cidr="/24"):
         self.cidr = cidr
         self.fpath = fpath
 
     def save(self, targets):
+        assert len(targets) != 0, "Empty target list"
         ips = []
         with open(self.fpath, 'wt') as qfile:
             for target in targets:
@@ -72,7 +75,7 @@ class TargetOptimization:
                             qfile.write(f"{net.with_prefixlen}\n")
                     else:
                         ips.append(ipaddress.ip_address(target.strip()))
-                except (TypeError, ValueError) as ex:
+                except (TypeError, ValueError):
                     log.error(f"Error optimizing target: {target}")
 
             # sorting the ip addresses.

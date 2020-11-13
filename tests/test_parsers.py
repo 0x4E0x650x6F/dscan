@@ -1,9 +1,9 @@
 import os
 import unittest
-from unittest.mock import patch, mock_open, call
+from unittest.mock import call, mock_open, patch
 
-from dscan.models.parsers import ReportsParser
-from dscan.models.parsers import TargetOptimization
+from dscan.models.parsers import ReportsParser, TargetOptimization
+
 
 class TestReportsParsers(unittest.TestCase):
 
@@ -594,7 +594,7 @@ class TestReportsParsers(unittest.TestCase):
             call().write('192.168.10.0/30\n'),
             call().write('192.168.10.6-12\n'),
             call().write('192.168.10.14/31\n')
-            ]
+        ]
 
         mock_obj = mock_open()
         with patch('builtins.open', mock_obj) as mopen:

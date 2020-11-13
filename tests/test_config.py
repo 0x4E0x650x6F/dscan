@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 # encoding: utf-8
 
-import unittest
+import logging
 import os
 import pickle
+import sys
+import unittest
 from argparse import Namespace
-from configparser import ConfigParser
-from configparser import ExtendedInterpolation
+from configparser import ConfigParser, ExtendedInterpolation
+from unittest.mock import mock_open, patch
 
 from dscan.models.scanner import Config, Context
-from unittest.mock import patch
-from unittest.mock import mock_open
 
 
 class TestSettings(unittest.TestCase):
@@ -162,17 +162,12 @@ class TestSettings(unittest.TestCase):
 
         self.assertEqual('127.0.0.1', self.config.host)
         self.assertEqual('2040', self.config.port)
-        self.assertEqual(os.path.join(os.path.dirname(__file__),
-                                      'test/run/targets.work'), self.config.queue_path)
-        self.assertEqual(os.path.join(os.path.dirname(__file__),
-                                      'test/run/live-targets.work'),
+        self.assertEqual('test/run/targets.work', self.config.queue_path)
+        self.assertEqual('test/run/live-targets.work',
                          self.config.ltargets_path)
-        self.assertEqual(os.path.join(os.path.dirname(__file__),
-                                      'test/run/current.trace'), self.config.resume_path)
-        self.assertEqual(os.path.join(os.path.dirname(__file__),
-                                      'data/certfile.crt'), self.config.sslcert)
-        self.assertEqual(os.path.join(os.path.dirname(__file__),
-                                      'data/keyfile.key'), self.config.sslkey)
+        self.assertEqual('test/run/current.trace', self.config.resume_path)
+        self.assertEqual('data/certfile.crt', self.config.sslcert)
+        self.assertEqual('data/keyfile.key', self.config.sslkey)
         self.assertEqual(expect_disc, self.config.stage_list[0].options)
         self.assertEqual(expect_st1, self.config.stage_list[1].options)
         self.assertEqual(expect_st2, self.config.stage_list[2].options)
@@ -180,19 +175,15 @@ class TestSettings(unittest.TestCase):
         self.assertEqual(expect_st4, self.config.stage_list[4].options)
         self.assertEqual(expect_st5, self.config.stage_list[5].options)
         self.assertEqual(2, self.mock_makedirs.call_count)
-        self.assertEqual(os.path.join(os.path.dirname(
-            __file__),'test/reports'), self.config.outdir)
-        self.mock_makedirs.assert_any_call(os.path.join(os.path.dirname(
-            __file__),'test/reports'), exist_ok=True)
-        self.mock_makedirs.assert_any_call(os.path.join(os.path.dirname(
-            __file__),'test/run'), exist_ok=True)
+        self.assertEqual('test/reports', self.config.outdir)
+        self.mock_makedirs.assert_any_call('test/reports', exist_ok=True)
+        self.mock_makedirs.assert_any_call('test/run', exist_ok=True)
 
     def test_address_optimization(self):
         with patch('builtins.open', mock_open()) as mopen:
             handle = mopen.return_value
             self.config.target_optimization(self.targets)
-            mopen.assert_any_call(os.path.join(os.path.dirname(__file__),
-                                               'test/run/targets.work'), "wt")
+            mopen.assert_any_call('test/run/targets.work', "wt")
             self.assertEqual(handle.write.call_count, 2)
             handle.writelines.assert_called_once()
             handle.write.assert_any_call('192.168.10.0/28\n')
@@ -203,18 +194,19 @@ class TestSettings(unittest.TestCase):
             handle = mopen.return_value
             ctx = Context(self.config)
             self.config.save_context(ctx)
-            mopen.assert_any_call(os.path.join(os.path.dirname(__file__),
-                                               'test/run/current.trace'), "wb")
+            mopen.assert_any_call('test/run/current.trace', "wb")
             self.assertEqual(1, handle.write.call_count)
             handle.write.assert_any_call(pickle.dumps(ctx))
 
     def test_agent(self):
         with patch('os.makedirs') as mock_makedirs:
             agent_config = Config(self.cfg, self.agent_options)
-            self.assertEqual(os.path.join(os.path.dirname(
-            __file__),'test/reports'), agent_config.outdir)
+            self.assertEqual('test/reports', agent_config.outdir)
             self.assertEqual('127.0.0.1', agent_config.host)
             self.assertEqual('2040', agent_config.port)
             self.assertEqual(1, mock_makedirs.call_count)
-            mock_makedirs.assert_any_call(os.path.join(os.path.dirname(
-            __file__),'test/reports'), exist_ok=True)
+            mock_makedirs.assert_any_call('test/reports', exist_ok=True)
+
+
+if __name__ == '__main__':
+    unittest.main()

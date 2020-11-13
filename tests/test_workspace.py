@@ -1,14 +1,13 @@
+
 import os
-import unittest
 import pickle
-from io import StringIO, BytesIO
+import unittest
+from io import BytesIO, StringIO
 from os import DirEntry
-from unittest.mock import patch
-from unittest.mock import MagicMock
-from unittest.mock import Mock
-from dscan.models.scanner import ServerConfig
-from dscan.models.scanner import File
-from dscan.models.scanner import Task, STATUS, DiscoveryStage, Stage, Context
+from unittest.mock import MagicMock, Mock, patch
+
+from dscan.models.scanner import (STATUS, Context, DiscoveryStage, File,
+                                  ServerConfig, Stage, Task)
 
 
 class FileSystemMockTestCase(unittest.TestCase):
@@ -116,7 +115,7 @@ class TestRuntimeContext(FileSystemMockTestCase):
         self.data_path = os.path.join(os.path.dirname(__file__), 'data')
 
         with open(os.path.join(self.data_path,
-                                     "discovery-nonstandar.xml")) as f:
+                               "discovery-nonstandar.xml")) as f:
             self.report1 = StringIO(f.read())
 
         with open(os.path.join(self.data_path, "discovery-nonstandard.xml"))\
@@ -164,16 +163,16 @@ class TestRuntimeContext(FileSystemMockTestCase):
             "fake/run/current.trace": self.resume
         }
 
-    def side_effect(self, name, mode="r"):
+    def side_effect(self, *args):
+        name = args[0]
         if name == "fake/run/live_hosts.work" or name \
                 == 'fake/run/current.trace':
             self.live_targets.seek(0)
-            #self.resume.seek(0)
         return self.build_mock(self.mocks[name])
 
     def check_tasks(self, task_data, task, stage_name, nactive,
                     expected_target, expected_nactive=1):
-        options, target = task_data
+        target, options = task_data
         self.assertIsNotNone(task_data)
         self.assertEqual(stage_name, task.stage_name)
         self.assertEqual(expected_target, target)
@@ -185,7 +184,15 @@ class TestRuntimeContext(FileSystemMockTestCase):
     def test_context_full_flow(self, mock_file):
         mock_file.side_effect = self.side_effect
         context = Context(self.mock_server_config)
+
         self.assertEqual(3, len(context.stage_list))
+        expected_active_status = [('discovery', 2, 2, "100.00%"),
+                                  ('stage1', 1, 1, "100.00%"),
+                                  ('stage2', 1, 0, "0.00%")]
+        expected_task_status = [
+            ('127.0.0.1:1010', 'stage1', 'SCHEDULED', '172.16.71.132/31'),
+            ('127.0.0.2:1010', 'stage2', 'SCHEDULED', '172.16.71.132/31')
+        ]
 
         agent = "127.0.0.1:1010"
         # starts with stage 1 discovery
@@ -196,6 +203,7 @@ class TestRuntimeContext(FileSystemMockTestCase):
                          "172.16.71.132")
 
         context.completed(agent)
+
         # stage 1 discovery target 2
         task_data = context.pop(agent)
         task = context.active.get(agent)
@@ -210,7 +218,6 @@ class TestRuntimeContext(FileSystemMockTestCase):
         nactive = len(context.active)
         self.check_tasks(task_data, task, "stage1", nactive,
                          "172.16.71.132/31")
-
         # if another agent pulls now should be 2 active and stage 2 should
         # start
         task_data = context.pop("127.0.0.2:1010")
@@ -218,16 +225,37 @@ class TestRuntimeContext(FileSystemMockTestCase):
         nactive = len(context.active)
         self.check_tasks(task_data, task, "stage2", nactive,
                          "172.16.71.132/31", 2)
-        self.assertIsNone(context.pop("127.0.0.1:1010"))
+        task_status = context.tasks_status()
+
+        self.assertEqual(expected_task_status, task_status)
+        context.completed(agent)
+
+        nstages, pending, completion = context.ctx_status()[0]
+        self.assertEqual(3, nstages)
+        self.assertEqual(0, pending)
+        self.assertEqual("66.67%", completion)
+        active_status = context.active_stages_status()
+        self.assertEqual(expected_active_status, active_status)
+        context.completed("127.0.0.2:1010")
+        nstages, pending, completion = context.ctx_status()[0]
+        self.assertEqual(3, nstages)
+        self.assertEqual(0, pending)
+        self.assertEqual("100.00%", completion)
+
+        self.assertIsNone(context.pop(agent))
 
     @patch('builtins.open', spec=open)
     def test_discovery_inc_stage(self, mock_file):
+        """
+        The discovery stage needs to finish to produce the list of live
+        targets for the other stages.
+        """
         mock_file.side_effect = self.side_effect
         context = Context(self.mock_server_config)
         self.assertEqual(3, len(context.stage_list))
-        for i in range(2):
-            context.pop("127.0.0.1:1010")
-        self.assertIsNone(context.pop("127.0.0.1:1010"))
+        context.pop("127.0.0.1:1010")
+        context.pop("127.0.0.2:1010")
+        self.assertIsNone(context.pop("127.0.0.3:1010"))
 
     @patch('builtins.open', spec=open)
     def test_interruption(self, mock_file):
@@ -236,6 +264,7 @@ class TestRuntimeContext(FileSystemMockTestCase):
         context = Context(self.mock_server_config)
         _ = context.pop(agent)
         context.interrupted(agent)
+
         self.assertEqual(1, len(context.pending))
         _ = context.pop(agent)
         self.assertEqual(0, len(context.pending))
@@ -246,12 +275,14 @@ class TestRuntimeContext(FileSystemMockTestCase):
         agent = "127.0.0.1:1010"
         context = Context(self.mock_server_config)
         _ = context.pop(agent)
+        # the completed status is short lived as it's deleted after the
+        # task is updated.
         test_cases = [
             ("running", STATUS.RUNNING),
             ("downloading", STATUS.DOWNLOADING),
-            ("completed", STATUS.COMPLETED),
             ("interrupted", STATUS.INTERRUPTED),
         ]
+
         for name, expected in test_cases:
             method = getattr(context, name)
             method(agent)
@@ -290,9 +321,13 @@ class TestRuntimeContext(FileSystemMockTestCase):
         self.assertIsNotNone(restored_ctx._lock)
         restored_ctx.completed(agent1)
         restored_ctx.completed(agent2)
-        ltask = restored_ctx.pop(agent1)
+        _ = restored_ctx.pop(agent1)
         restored_ctx.completed(agent1)
         restored_ctx.completed(agent2)
+        nstages, pending, completion = restored_ctx.ctx_status()[0]
+        self.assertEqual(3, nstages)
+        self.assertEqual(0, pending)
+        self.assertEqual("33.33%", completion)
         self.assertEqual("stage1", restored_ctx.cstage_name)
 
     @patch("os.stat")
