@@ -309,6 +309,10 @@ class Task:
         return self.stage_name, self.status.name, self.target, \
             self.options
 
+    def __str__(self):
+        return f"{self.stage_name}, {self.status.name}, {self.target}" \
+               f"{self.options}"
+
 
 class Stage:
 

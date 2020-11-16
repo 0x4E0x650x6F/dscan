@@ -10,7 +10,7 @@ import sys
 
 class Display:
     """
-    Data is displayed as a table.
+    Context is displayed as a table.
     """
     CLEAR_SCREEN = "\033c"
     CLEAR_CURRENT_LINE = "\033[1K\033[0G"
