@@ -13,8 +13,7 @@ import threading
 from enum import Enum
 
 from dscan import log
-
-from .parsers import ReportsParser, TargetOptimization
+from dscan.models.parsers import ReportsParser, TargetOptimization
 
 
 class Config:
@@ -62,7 +61,7 @@ class ServerConfig:
     )
 
     SSL_CERTS = (
-        'certs', 'sslcert', 'sslkey'
+        'certs', 'sslcert', 'sslkey', 'ciphers'
     )
 
     SCAN_CONF = 'nmap-scan'
@@ -90,6 +89,7 @@ class ServerConfig:
         # set cert properties
         self.sslcert = config.get(*self.SSL_CERTS[0:2:1])
         self.sslkey = config.get(*self.SSL_CERTS[0:3:2])
+        self.ciphers = config.get(*self.SSL_CERTS[0:4:3])
         digest: hashlib.sha512 = hashlib.sha512()
         try:
             with open(self.sslcert, 'rt') as cert:

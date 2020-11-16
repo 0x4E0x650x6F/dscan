@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 # encoding: utf-8
 
-import logging
 import os
 import pickle
-import sys
 import unittest
 from argparse import Namespace
 from configparser import ConfigParser, ExtendedInterpolation
@@ -125,8 +123,22 @@ class TestSettings(unittest.TestCase):
             '10.16.252.0/24\n', '10.16.253.0/24\n', '10.16.254.0/24\n',
             '10.16.255.0/24\n', '192.168.10.0/28\n', '192.168.12.0/24\n'
         ]
+        cls.ciphers = "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM" \
+                      "-SHA256:ECDHE-RSA-AES256-GCM-SHA384:" \
+                      "ECDHE-ECDSA-AES256-GCM-SHA384:" \
+                      "DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:" \
+                      "kEDH+AESGCM:ECDHE-RSA-AES128-SHA256:" \
+                      "ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:" \
+                      "ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:" \
+                      "ECDHE-ECDSA-AES256-SHA384:" \
+                      "ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:" \
+                      "DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:" \
+                      "DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:" \
+                      "DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:" \
+                      "!aNULL:!eNULL:!EXPORT:!DES:!RC4:!3DES:!MD5:!PSK"
 
     def setUp(self) -> None:
+
         self.server_options = Namespace(name='test', b='127.0.0.1', p='2040',
                                         cmd='srv', targets='foofile')
         self.agent_options = Namespace(name='test', s='127.0.0.1', p='2040',
@@ -168,6 +180,7 @@ class TestSettings(unittest.TestCase):
         self.assertEqual('test/run/current.trace', self.config.resume_path)
         self.assertEqual('data/certfile.crt', self.config.sslcert)
         self.assertEqual('data/keyfile.key', self.config.sslkey)
+        self.assertEqual(self.ciphers, self.config.ciphers)
         self.assertEqual(expect_disc, self.config.stage_list[0].options)
         self.assertEqual(expect_st1, self.config.stage_list[1].options)
         self.assertEqual(expect_st2, self.config.stage_list[2].options)
