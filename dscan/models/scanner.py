@@ -463,12 +463,15 @@ class Context:
     def running(self, agent):
         self._update_task_status(agent, STATUS.RUNNING)
 
-    def get_report(self, file_name):
+    def get_report(self, agent, file_name):
         """
+        :param agent: str with ipaddress and port in ip:port format
         :param file_name: name of the file sent by the agent.
         :return: file descriptor to save the scan report.
         """
         try:
+            _, tstage = self.__find_task_stage(agent)
+            file_name = f"{tstage.name}-{file_name}"
             report_file = open(os.path.join(self.reports_path, file_name),
                                "wb")
             return report_file

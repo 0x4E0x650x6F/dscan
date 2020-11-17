@@ -210,6 +210,7 @@ class TestRuntimeContext(FileSystemMockTestCase):
         nactive = len(context.active)
         self.check_tasks(task_data, task, "discovery", nactive,
                          "172.16.71.133")
+
         context.completed(agent)
 
         # stage 1

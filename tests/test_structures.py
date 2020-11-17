@@ -4,12 +4,12 @@ import unittest
 import struct
 from unittest.mock import patch, MagicMock
 from socket import socket
-from structures import Operations
-from structures import Auth
-from structures import Ready
-from structures import Command
-from structures import Report
-from structures import Structure
+from dscan.models.structures import Operations
+from dscan.models.structures import Auth
+from dscan.models.structures import Ready
+from dscan.models.structures import Command
+from dscan.models.structures import Report
+from dscan.models.structures import Structure
 
 
 class TestStructure(unittest.TestCase):

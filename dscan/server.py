@@ -5,6 +5,7 @@
 server.py
 server side responsible for the managing clients and scan execution flow.
 """
+import hashlib
 import hmac
 import ssl
 import os
@@ -16,11 +17,9 @@ from socketserver import ThreadingMixIn
 from socketserver import BaseRequestHandler
 
 from dscan.models.scanner import Context
-from structures import Auth, Status
-from structures import Ready
-from structures import Command
-from structures import Report
-from structures import Structure
+from dscan.models.structures import Auth, Status
+from dscan.models.structures import Command
+from dscan.models.structures import Structure
 from dscan import log
 
 
@@ -68,7 +67,7 @@ class DScanServer(ThreadingMixIn, TCPServer):
         :rtype: ´RequestHandlerClass´
         """
         return self.RequestHandlerClass(request, client_address,
-                                        self, self._terminate)
+                                        self, terminate_event=self._terminate)
 
     def shutdown(self):
         # an override to allow a local terminate event to be set!
@@ -80,13 +79,12 @@ class DScanServer(ThreadingMixIn, TCPServer):
 class AgentHandler(BaseRequestHandler):
     HEADER = "<B"
 
-    def __init__(self, request, client_address,
-                 server: DScanServer, terminate_event):
+    def __init__(self, *args, terminate_event, **kwargs):
         self._terminate = terminate_event
         self.msg = None
         self.authenticated = False
         self.connected = False
-        super().__init__(request, client_address, server)
+        super().__init__(*args, **kwargs)
 
     def is_connected(self):
         """
@@ -183,6 +181,56 @@ class AgentHandler(BaseRequestHandler):
         else:
             self.send_error(Status.UNAUTHORIZED)
             self.request.close()
+
+    def do_ready(self):
+        log.info("is Ready for targets")
+
+        log.info(f"Agent is running with uid {self.msg.uid}")
+        if self.msg.uid != 0:
+            log.info("Waning! agent is not running as root "
+                     "syn scans might abort not enough privileges!")
+
+        self.request.sendall(Command("127.0.0.1", "-sV -Pn -p1-1000").pack())
+        status_bytes = self.request.recv(1)
+
+        if len(status_bytes) == 0:
+            self.connected = False
+            log.info("Disconnected!")
+            return
+
+        status, = struct.unpack("<B", status_bytes)
+        if status == 0:
+            log.info("Started scanning !")
+        else:
+            log.info("Scan command returned Error")
+            log.info("Server is Terminating connection!")
+            self.connected = False
+
+    def do_report(self):
+        log.info("Agent Reporting Complete Scan!")
+        log.info(f"Filename {self.msg.filename} total file size "
+                 f"{self.msg.filesize} file hash {self.msg.filehash}")
+
+        file_size = self.msg.filesize
+        nbytes = 0
+
+        report = self.server.ctx.get_report(self.client_address,
+                                            self.msg.filename.decode("utf-8"))
+        digest = hashlib.sha512()
+        while nbytes < file_size:
+            data = self.request.recv(1024)
+            report.write(data)
+            digest.update(data)
+            nbytes = nbytes + len(data)
+
+        if not digest.hexdigest().encode("utf-8") == self.msg.filehash:
+            log.info(f"Files are not equal! {digest.hexdigest()}")
+            self.send_error(Status.FAILED)
+        else:
+            log.info("files are equal!")
+
+        report.flush()
+        report.close()
 
     def send_error(self, code):
         log.info(f"Sending Error code {code}")
