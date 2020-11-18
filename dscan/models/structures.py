@@ -7,7 +7,6 @@ network elements of the scanner
 """
 import struct
 from enum import IntEnum
-from typing import Any
 
 
 class Status(IntEnum):
