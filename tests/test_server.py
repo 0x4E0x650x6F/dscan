@@ -2,16 +2,28 @@ import hmac
 import os
 import io
 import struct
+import threading
+import logging
 import unittest
 from argparse import Namespace
 from configparser import ConfigParser, ExtendedInterpolation
+import ssl
+from socket import socket
+from socket import AF_INET
+from socket import SOCK_STREAM
 from unittest.mock import patch, MagicMock, mock_open
 from dscan.server import AgentHandler
 from dscan.models.structures import Auth
 from dscan.models.structures import Ready
 from dscan.models.structures import Report
-from dscan.models.scanner import Config
+from dscan.models.structures import Structure
+from dscan.models.scanner import Config, Context
 from dscan.server import DScanServer
+
+
+log = logging.getLogger()
+log.addHandler(logging.StreamHandler())
+log.setLevel(logging.DEBUG)
 
 
 class BufMock:
@@ -78,6 +90,10 @@ class TestAgentHandler(unittest.TestCase):
         self.patcher = patch('os.makedirs')
         self.mock_makedirs = self.patcher.start()
         self.settings = Config(self.cfg, options)
+        # ctx = Context(self.settings)
+        self.ctx = MagicMock(spect=Context)
+        self.ctx.pop.return_value = ("127.0.0.1", "-sV -Pn -p1-1000")
+        self.ctx.secret_key = self.settings.secret_key
         self.mock_server = MagicMock(spect=DScanServer)
         self.mock_server.secret_key = self.settings.secret_key
 
@@ -97,9 +113,9 @@ class TestAgentHandler(unittest.TestCase):
         buffer = BufMock(Auth(digest))
         mock_socket.recv = buffer.read
         mock = MagicMock()
-        mock.secret_key = self.settings.secret_key
-        handler = AgentHandler(mock_socket, '127.0.0.1', mock,
-                               terminate_event=mock)
+        handler = AgentHandler(mock_socket, ('127.0.0.1', '1234'),
+                               self.mock_server, terminate_event=mock,
+                               context=self.ctx)
         self.assertTrue(handler.authenticated)
 
     @patch.object(hmac, 'compare_digest', return_value=True)
@@ -109,18 +125,45 @@ class TestAgentHandler(unittest.TestCase):
         mock = MagicMock()
         mock_socket.recv = buffer.read
 
-        AgentHandler(mock_socket, '127.0.0.1', self.mock_server,
-                     terminate_event=mock)
+        AgentHandler(mock_socket, ('127.0.0.1', '1234'), self.mock_server,
+                     terminate_event=mock, context=self.ctx)
         mock_socket.sendall.assert_called_with(
             b'\x03\t\x10127.0.0.1-sV -Pn -p1-1000')
+        self.ctx.running.assert_called_once()
+        self.ctx.running.assert_called_with("127.0.0.1:1234")
+
+    @patch.object(hmac, 'compare_digest', return_value=True)
+    @patch('socket.socket')
+    def test_ready_failed(self, mock_socket, handler):
+        buffer = BufMock(Auth("fu"), Ready(0, "bub"), struct.pack("<B", 1))
+        mock = MagicMock()
+        mock_socket.recv = buffer.read
+
+        AgentHandler(mock_socket, ('127.0.0.1', '1234'), self.mock_server,
+                     terminate_event=mock, context=self.ctx)
+        mock_socket.sendall.assert_called_with(
+            b'\x03\t\x10127.0.0.1-sV -Pn -p1-1000')
+        self.ctx.running.assert_not_called()
+        self.ctx.interrupted.assert_called_once()
+
+    @patch.object(hmac, 'compare_digest', return_value=True)
+    @patch('socket.socket')
+    def test_ready_disconnected(self, mock_socket, handler):
+        buffer = BufMock(Auth("fu"), Ready(0, "bub"))
+        mock = MagicMock()
+        mock_socket.recv = buffer.read
+
+        AgentHandler(mock_socket, ('127.0.0.1', '1234'), self.mock_server,
+                     terminate_event=mock, context=self.ctx)
+        mock_socket.sendall.assert_called_with(
+            b'\x03\t\x10127.0.0.1-sV -Pn -p1-1000')
+        self.ctx.running.assert_not_called()
+        self.ctx.interrupted.assert_called_once()
 
     @patch.object(hmac, 'compare_digest', return_value=True)
     @patch('socket.socket')
     def test_report_send(self, mock_socket, handler):
-        expected_hash = "055a61499ea7c0d96332cf850f69ecb7295" \
-               "0c3666dee9912ca5b175dd8c5e592a6ea66" \
-               "b90d47f40f84834fc50fa18c0984a9264a2" \
-               "de5b74f3a195316ebb26b04"
+        expected_hash = "055a61499ea7c0d96332cf850f69ecb7295"
 
         file = open(os.path.join(self.data_path, 'discovery-nonstandar.xml'),
                     'rb')
@@ -132,16 +175,48 @@ class TestAgentHandler(unittest.TestCase):
         mock_socket.recv = buffer.read
         report_mock = mock_open()
         with patch('builtins.open', report_mock) as m:
-            self.mock_server.ctx.get_report = report_mock
-            AgentHandler(mock_socket, '127.0.0.1', self.mock_server,
-                         terminate_event=mock)
+            self.ctx.get_report = report_mock
+            AgentHandler(mock_socket, ('127.0.0.1', '1234'), self.mock_server,
+                         terminate_event=mock, context=self.ctx)
             handle = m.return_value
             offset = file.tell() - 996
             file.seek(offset)
             self.assertEqual(handle.write.call_count, 3)
             handle.write.assert_called_with(file.read())
+            self.ctx.downloading.assert_called_with("127.0.0.1:1234")
+            self.ctx.completed.assert_called_with("127.0.0.1:1234")
         file.close()
+
+    def test_server(self):
+
+        server = DScanServer((self.settings.host, self.settings.port),
+                             AgentHandler, options=self.settings)
+
+        server_thread = threading.Thread(target=server.serve_forever)
+        # Exit the server thread when the main thread terminates
+        server_thread.daemon = True
+        server_thread.start()
+        log.info(f"Server loop running in thread:{server_thread.name}")
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.load_verify_locations(self.settings.sslcert)
+        s = context.wrap_socket(socket(AF_INET, SOCK_STREAM),
+                                server_side=False, server_hostname="dscan")
+        s.connect(('127.0.0.1', 9011))
+
+        #struct_size = struct.calcsize("<B128s")
+        #op, data = struct.unpack("<B128s", s.recv(struct_size))
+        s.recv(1)
+        opr = Structure.create(1, s)
+        hmac_hash = hmac.new(self.settings.secret_key, opr.data,
+                             'sha512')
+        digest = hmac_hash.hexdigest().encode("utf-8")
+
+        s.sendall(Auth(digest).pack())
+        s.close()
+        server.shutdown()
 
 
 if __name__ == '__main__':
+
     unittest.main()

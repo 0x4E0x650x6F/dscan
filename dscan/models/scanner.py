@@ -501,7 +501,8 @@ class Context:
                     self.pending.append(task)
                     del self.active[agent]
             else:
-                log.debug(f"One of this is none! {task}, {tstage}")
+                log.debug(f"Agent {agent} is trying to update {status} on "
+                          f"non existing task")
 
     def __cstage(self, force_next=False):
         """

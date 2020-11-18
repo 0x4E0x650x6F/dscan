@@ -1,5 +1,5 @@
 import logging
 
 global settings
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 log.addHandler(logging.NullHandler())

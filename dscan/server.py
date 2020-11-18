@@ -53,8 +53,9 @@ class DScanServer(ThreadingMixIn, TCPServer):
         # TODO: protocol version is hardcoded!
         client_ssl = ssl.wrap_socket(client, keyfile=self.options.sslkey,
                                      certfile=self.options.sslcert,
-                                     ssl_version=ssl.PROTOCOL_SSLv23,
+                                     ssl_version=ssl.PROTOCOL_TLS,
                                      ca_certs=None,
+                                     server_side=True,
                                      do_handshake_on_connect=True,
                                      suppress_ragged_eofs=True,
                                      ciphers=self.options.ciphers)
@@ -67,7 +68,8 @@ class DScanServer(ThreadingMixIn, TCPServer):
         :rtype: ´RequestHandlerClass´
         """
         return self.RequestHandlerClass(request, client_address,
-                                        self, terminate_event=self._terminate)
+                                        self, terminate_event=self._terminate,
+                                        context=self.ctx)
 
     def shutdown(self):
         # an override to allow a local terminate event to be set!
@@ -79,12 +81,17 @@ class DScanServer(ThreadingMixIn, TCPServer):
 class AgentHandler(BaseRequestHandler):
     HEADER = "<B"
 
-    def __init__(self, *args, terminate_event, **kwargs):
+    def __init__(self, *args, terminate_event, context, **kwargs):
         self._terminate = terminate_event
+        self.ctx = context
         self.msg = None
         self.authenticated = False
         self.connected = False
         super().__init__(*args, **kwargs)
+
+    @property
+    def agent(self):
+        return "{}:{}".format(*self.client_address)
 
     def is_connected(self):
         """
@@ -124,6 +131,9 @@ class AgentHandler(BaseRequestHandler):
         if not self.parse_message():
             self.connected = False
             log.info("Disconnected!")
+            # mark any running task as interrupted
+            # so that other agent can take it later
+            self.ctx.interrupted(self.agent)
             return
 
         command_name = f"do_{self.msg.op_code.name.lower()}"
@@ -155,6 +165,9 @@ class AgentHandler(BaseRequestHandler):
                 except (socket.timeout, ConnectionError) as e:
                     log.info(f"{self.client_address} Timeout - {e}")
                     self.connected = False
+                    # mark any running task as interrupted
+                    # so that other agent can take it later
+                    self.ctx.interrupted(self.agent)
 
                 # wait a bit, in case a shutdown was requested!
                 self._terminate.wait(1.0)
@@ -164,7 +177,7 @@ class AgentHandler(BaseRequestHandler):
     def do_auth(self):
         log.info(f"{self.client_address} initialized Authentication")
         challenge = os.urandom(128)
-        self.request.sendall(Auth(challenge))
+        self.request.sendall(Auth(challenge).pack())
         # wait for the client response
 
         if not self.parse_message():
@@ -190,21 +203,25 @@ class AgentHandler(BaseRequestHandler):
             log.info("Waning! agent is not running as root "
                      "syn scans might abort not enough privileges!")
 
-        self.request.sendall(Command("127.0.0.1", "-sV -Pn -p1-1000").pack())
+        cmd = Command(*self.ctx.pop(self.agent))
+        self.request.sendall(cmd.pack())
         status_bytes = self.request.recv(1)
 
         if len(status_bytes) == 0:
             self.connected = False
             log.info("Disconnected!")
+            self.ctx.interrupted(self.agent)
             return
 
         status, = struct.unpack("<B", status_bytes)
         if status == 0:
             log.info("Started scanning !")
+            self.ctx.running(self.agent)
         else:
             log.info("Scan command returned Error")
             log.info("Server is Terminating connection!")
             self.connected = False
+            self.ctx.interrupted(self.agent)
 
     def do_report(self):
         log.info("Agent Reporting Complete Scan!")
@@ -213,21 +230,23 @@ class AgentHandler(BaseRequestHandler):
 
         file_size = self.msg.filesize
         nbytes = 0
-
-        report = self.server.ctx.get_report(self.client_address,
-                                            self.msg.filename.decode("utf-8"))
+        report = self.ctx.get_report(self.client_address,
+                                     self.msg.filename.decode("utf-8"))
         digest = hashlib.sha512()
+        self.ctx.downloading(self.agent)
         while nbytes < file_size:
             data = self.request.recv(1024)
             report.write(data)
             digest.update(data)
             nbytes = nbytes + len(data)
 
-        if not digest.hexdigest().encode("utf-8") == self.msg.filehash:
+        if not hmac.compare_digest(digest.hexdigest().encode("utf-8"),
+                                   self.msg.filehash):
             log.info(f"Files are not equal! {digest.hexdigest()}")
             self.send_error(Status.FAILED)
         else:
             log.info("files are equal!")
+            self.ctx.completed(self.agent)
 
         report.flush()
         report.close()
