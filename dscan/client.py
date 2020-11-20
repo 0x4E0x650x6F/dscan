@@ -72,6 +72,9 @@ class Agent:
             `bool`
         """
         con_retries = 0
+        # while the connection retry is under 3 tries
+        # everytime the connection is interrupted the client
+        # tries to connect authenticates and requests a target!
         while con_retries < 3:
             try:
                 self.socket.connect((self.config.host, self.config.port))

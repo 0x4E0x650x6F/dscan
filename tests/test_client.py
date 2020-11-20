@@ -1,15 +1,17 @@
 import hashlib
 import hmac
+import os
 import struct
 import unittest
 from argparse import Namespace
 from socket import timeout
-from unittest.mock import patch, mock_open, call, Mock, MagicMock
+from unittest.mock import patch, mock_open, call, MagicMock
+
+import tests
+from dscan.client import Agent, Scanner
 from dscan.models.scanner import Config
 from dscan.models.structures import Auth, Command, Report, Ready
-from dscan.client import Agent, Scanner
-import tests
-import os
+
 
 class TestAgentHandler(unittest.TestCase):
     def setUp(self):
@@ -29,6 +31,7 @@ class TestAgentHandler(unittest.TestCase):
                          b'`\xfb' \
                          b'\xc6:SB\xeff\x15\r\xcb\xe9\xa4\xefO\x03i\xe9' \
                          b'\xefoMz\x8b'
+
         self.cfg = tests.create_config()
         self.patcher_makedirs = patch('os.makedirs')
         self.mock_makedirs = self.patcher_makedirs.start()
@@ -50,6 +53,23 @@ class TestAgentHandler(unittest.TestCase):
         hmac_hash = hmac.new(self.settings.secret_key, self.challenge,
                              'sha512')
         self.digest_auth = hmac_hash.hexdigest().encode("utf-8")
+        self.expected_calls_timeout = [
+            call.connect(('127.0.0.1', 2040)),
+            call.recv(1),
+            call.__bool__(),
+            call.recv(128),
+            call.sendall(Auth(self.digest_auth).pack()),
+            call.recv(1),
+            call.sendall(Ready(os.getuid(), "AAAAAA").pack()),
+            call.recv(1),
+            call.close(),
+            call.connect(('127.0.0.1', 2040)),
+            call.recv(1),
+            call.close(),
+            call.connect(('127.0.0.1', 2040)),
+            call.recv(1),
+            call.close()
+        ]
 
     def tearDown(self):
         self.addCleanup(self.patcher_makedirs.stop)
@@ -80,24 +100,6 @@ class TestAgentHandler(unittest.TestCase):
         self.check_mock_calls_connect_disconnect()
 
     def test_timeout_after_auth(self):
-        expected_calls = [
-            call.connect(('127.0.0.1', 2040)),
-            call.recv(1),
-            call.__bool__(),
-            call.recv(128),
-            call.sendall(Auth(self.digest_auth).pack()),
-            call.recv(1),
-            call.sendall(Ready(os.getuid(), "AAAAAA").pack()),
-            call.recv(1),
-            call.close(),
-            call.connect(('127.0.0.1', 2040)),
-            call.recv(1),
-            call.close(),
-            call.connect(('127.0.0.1', 2040)),
-            call.recv(1),
-            call.close()
-        ]
-
         mock_ex = MagicMock()
         mock_ex.side_effect = [struct.pack("<B", 1),
                                struct.pack("<128s", self.challenge),
@@ -105,33 +107,15 @@ class TestAgentHandler(unittest.TestCase):
                                timeout(),
                                timeout(),
                                timeout()
-                              ]
+                               ]
         self.mock_socket.recv = mock_ex
         with patch('random.choice') as mock_choice:
             mock_choice.return_value = "A"
             agent = Agent(self.settings)
             agent.connect()
-            self.mock_socket.assert_has_calls(expected_calls)
+            self.mock_socket.assert_has_calls(self.expected_calls_timeout)
 
     def test_reset_retry_count_timeout(self):
-        expected_calls = [
-            call.connect(('127.0.0.1', 2040)),
-            call.recv(1),
-            call.__bool__(),
-            call.recv(128),
-            call.sendall(Auth(self.digest_auth).pack()),
-            call.recv(1),
-            call.sendall(Ready(os.getuid(), "AAAAAA").pack()),
-            call.recv(1),
-            call.close(),
-            call.connect(('127.0.0.1', 2040)),
-            call.recv(1),
-            call.close(),
-            call.connect(('127.0.0.1', 2040)),
-            call.recv(1),
-            call.close()
-        ]
-
         mock_ex = MagicMock()
         mock_ex.side_effect = [struct.pack("<B", 1),
                                struct.pack("<128s", self.challenge),
@@ -143,16 +127,13 @@ class TestAgentHandler(unittest.TestCase):
                                timeout(),
                                timeout(),
                                timeout(),
-                              ]
+                               ]
         self.mock_socket.recv = mock_ex
-        digest = hashlib.sha512(b"pickabu").hexdigest()
-        data = "hello hello report mock\n"
-        report_mock = mock_open(read_data=data)
         with patch('random.choice') as mock_choice:
             mock_choice.return_value = "A"
             agent = Agent(self.settings)
             agent.connect()
-            self.mock_socket.assert_has_calls(expected_calls)
+            self.mock_socket.assert_has_calls(self.expected_calls_timeout)
 
     @patch('os.getuid')
     def test_full(self, mgetuid):
