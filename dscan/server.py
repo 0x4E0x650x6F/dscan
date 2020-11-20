@@ -53,7 +53,7 @@ class DScanServer(ThreadingMixIn, TCPServer):
         # TODO: protocol version is hardcoded!
         client_ssl = ssl.wrap_socket(client, keyfile=self.options.sslkey,
                                      certfile=self.options.sslcert,
-                                     ssl_version=ssl.PROTOCOL_TLS,
+                                     ssl_version=ssl.PROTOCOL_TLSv1_2,
                                      ca_certs=None,
                                      server_side=True,
                                      do_handshake_on_connect=True,
@@ -102,33 +102,13 @@ class AgentHandler(BaseRequestHandler):
         """
         return self.connected or not self._terminate.is_set()
 
-    def parse_message(self):
-        """
-        used to parse a message
-        :return: True if message was decoded successfully False otherwise.
-        :rtype: `bool`
-        """
-        try:
-            op_size = struct.calcsize(self.HEADER)
-            op_bytes = self.request.recv(op_size)
-            if len(op_bytes) == 0:
-                # agent disconnected !
-                self.msg = None
-                return
-
-            op, = struct.unpack(self.HEADER, op_bytes)
-            self.msg = Structure.create(op, self.request)
-            return True
-        except (struct.error, ValueError) as e:
-            log.info("Error parsing the message %s" % e)
-            return False
-
     def dispatcher(self):
         """
         Command dispatcher all logic
         to decode and dispatch the call
         """
-        if not self.parse_message():
+        self.msg = Structure.create(self.request)
+        if not self.msg:
             self.connected = False
             log.info("Disconnected!")
             # mark any running task as interrupted
@@ -180,7 +160,8 @@ class AgentHandler(BaseRequestHandler):
         self.request.sendall(Auth(challenge).pack())
         # wait for the client response
 
-        if not self.parse_message():
+        self.msg = Structure.create(self.request)
+        if not self.msg:
             # something's wrong with the message!
             self.send_error(Status.FAILED)
             return
@@ -191,6 +172,7 @@ class AgentHandler(BaseRequestHandler):
         if hmac.compare_digest(digest, self.msg.data):
             log.info("Authenticated Successfully")
             self.authenticated = True
+            self.send_error(Status.SUCCESS)
         else:
             self.send_error(Status.UNAUTHORIZED)
             self.request.close()
@@ -214,7 +196,7 @@ class AgentHandler(BaseRequestHandler):
             return
 
         status, = struct.unpack("<B", status_bytes)
-        if status == 0:
+        if status == Status.SUCCESS.value:
             log.info("Started scanning !")
             self.ctx.running(self.agent)
         else:

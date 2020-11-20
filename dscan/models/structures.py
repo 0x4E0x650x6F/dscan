@@ -7,6 +7,7 @@ network elements of the scanner
 """
 import struct
 from enum import IntEnum
+from dscan import log
 
 
 class Status(IntEnum):
@@ -34,6 +35,7 @@ class Structure:
     __slots__ = ()
     op_code = None
     _format = None
+    HEADER = "<B"
     """
     The object representation for the info exchanged between
     agents and servers.
@@ -102,12 +104,23 @@ class Structure:
                 return struct.pack(fmt, self.op_code.value, *lengths, *values)
 
     @classmethod
-    def create(cls, op, sock):
-        subs = cls.__subclasses__()
-        for operation in subs:
-            if operation.op_code.value == op:
-                return operation(sock=sock)
-        return None
+    def create(cls, sock):
+        try:
+            op_size = struct.calcsize(cls.HEADER)
+            op_bytes = sock.recv(op_size)
+            if len(op_bytes) == 0:
+                # agent disconnected !
+                return
+            op, = struct.unpack(cls.HEADER, op_bytes)
+
+            subs = cls.__subclasses__()
+            for operation in subs:
+                if operation.op_code.value == op:
+                    return operation(sock=sock)
+            return None
+        except (struct.error, ValueError) as e:
+            log.info("Error parsing the message %s" % e)
+            return None
 
 
 class Auth(Structure):

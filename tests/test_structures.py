@@ -10,6 +10,7 @@ from dscan.models.structures import Ready
 from dscan.models.structures import Command
 from dscan.models.structures import Report
 from dscan.models.structures import Structure
+from  dscan.models.structures import Status
 
 
 class TestStructure(unittest.TestCase):
@@ -75,6 +76,9 @@ class TestStructure(unittest.TestCase):
             self.assertEqual(expected.filesize, result.filesize)
             self.assertEqual(expected.filename, result.filename)
             self.assertEqual(expected.filehash, result.filehash)
+
+    def test_status(self):
+        self.assertTrue((0 == Status.SUCCESS.value))
 
 
 if __name__ == '__main__':

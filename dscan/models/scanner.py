@@ -20,6 +20,9 @@ class Config:
     """
         Runtime configurations
     """
+    SSL_CERTS = (
+        'certs', 'sslcert', 'sslkey', 'ciphers', 'cert-hostname'
+    )
 
     BASE = (
         'base', 'reports',
@@ -44,6 +47,19 @@ class Config:
             self.config = ServerConfig(config, options, self.outdir)
         else:
             self.host = options.s
+        # set cert properties
+        self.sslcert = config.get(*self.SSL_CERTS[0:2:1])
+        self.sslkey = config.get(*self.SSL_CERTS[0:3:2])
+        self.ciphers = config.get(*self.SSL_CERTS[0:4:3])
+        self.srv_hostname = config.get(*self.SSL_CERTS[0:5:4])
+
+        digest: hashlib.sha512 = hashlib.sha512()
+        try:
+            with open(self.sslcert, 'rt') as cert:
+                digest.update(cert.read().strip().encode("utf-8"))
+                self.secret_key = digest.hexdigest().encode("utf-8")
+        except OSError as ex:
+            log.error(f"failed to open cert file {ex}")
 
     def __getattr__(self, name):
         if hasattr(self.config, name):
@@ -58,10 +74,6 @@ class ServerConfig:
     """
     SERVER = (
         'server', 'stats', 'targets', 'live-targets', 'trace',
-    )
-
-    SSL_CERTS = (
-        'certs', 'sslcert', 'sslkey', 'ciphers'
     )
 
     SCAN_CONF = 'nmap-scan'
@@ -86,17 +98,6 @@ class ServerConfig:
         os.makedirs(self.rundir, exist_ok=True)
         # init scan stages !
         self.__create_stages(dict(config.items('nmap-scan')))
-        # set cert properties
-        self.sslcert = config.get(*self.SSL_CERTS[0:2:1])
-        self.sslkey = config.get(*self.SSL_CERTS[0:3:2])
-        self.ciphers = config.get(*self.SSL_CERTS[0:4:3])
-        digest: hashlib.sha512 = hashlib.sha512()
-        try:
-            with open(self.sslcert, 'rt') as cert:
-                digest.update(cert.read().strip().encode("utf-8"))
-                self.secret_key = digest.hexdigest().encode("utf-8")
-        except OSError as ex:
-            log.error(f"failed to open cert file {ex}")
 
     def __create_stages(self, scan_options):
         self.stage_list = []

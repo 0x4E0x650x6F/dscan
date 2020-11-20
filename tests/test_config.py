@@ -217,6 +217,11 @@ class TestSettings(unittest.TestCase):
             self.assertEqual('test/reports', agent_config.outdir)
             self.assertEqual('127.0.0.1', agent_config.host)
             self.assertEqual('2040', agent_config.port)
+            self.assertEqual('data/certfile.crt', agent_config.sslcert)
+            self.assertEqual('data/keyfile.key', agent_config.sslkey)
+            self.assertEqual('dscan', agent_config.srv_hostname)
+            self.assertEqual(self.ciphers, agent_config.ciphers)
+
             self.assertEqual(1, mock_makedirs.call_count)
             mock_makedirs.assert_any_call('test/reports', exist_ok=True)
 
