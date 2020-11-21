@@ -1,16 +1,12 @@
 import hashlib
 import io
-import unittest
 import struct
-from unittest.mock import patch, MagicMock
+import unittest
 from socket import socket
-from dscan.models.structures import Operations
-from dscan.models.structures import Auth
-from dscan.models.structures import Ready
-from dscan.models.structures import Command
-from dscan.models.structures import Report
-from dscan.models.structures import Structure
-from  dscan.models.structures import Status
+from unittest.mock import MagicMock, patch
+
+from dscan.models.structures import (Auth, Command, Operations, Ready, Report,
+                                     Status, Structure)
 
 
 class TestStructure(unittest.TestCase):

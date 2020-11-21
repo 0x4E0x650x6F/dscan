@@ -1,22 +1,17 @@
 import hmac
 import os
+import ssl
 import struct
 import threading
 import unittest
 from argparse import Namespace
-import ssl
-from socket import socket
-from socket import AF_INET
-from socket import SOCK_STREAM
-from unittest.mock import patch, MagicMock, mock_open
-from dscan.server import AgentHandler
-from dscan.models.structures import Auth
-from dscan.models.structures import Ready
-from dscan.models.structures import Report
-from dscan.models.structures import Structure
+from socket import AF_INET, SOCK_STREAM, socket
+from unittest.mock import MagicMock, mock_open, patch
+
 from dscan.models.scanner import Config, Context
-from dscan.server import DScanServer
-from tests import log, BufMock, create_config, data_path
+from dscan.models.structures import Auth, Ready, Report, Structure
+from dscan.server import AgentHandler, DScanServer
+from tests import BufMock, create_config, data_path, log
 
 
 class TestAgentHandler(unittest.TestCase):

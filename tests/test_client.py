@@ -5,13 +5,12 @@ import struct
 import unittest
 from argparse import Namespace
 from socket import timeout
-from unittest.mock import patch, mock_open, call, MagicMock
+from unittest.mock import MagicMock, call, mock_open, patch
 
 import tests
 from dscan.client import Agent
-from dscan.models.scanner import ScanProcess
-from dscan.models.scanner import Config
-from dscan.models.structures import Auth, Command, Report, Ready
+from dscan.models.scanner import Config, ScanProcess
+from dscan.models.structures import Auth, Command, Ready, Report
 
 
 class TestAgentHandler(unittest.TestCase):
@@ -32,7 +31,6 @@ class TestAgentHandler(unittest.TestCase):
                          b'`\xfb' \
                          b'\xc6:SB\xeff\x15\r\xcb\xe9\xa4\xefO\x03i\xe9' \
                          b'\xefoMz\x8b'
-
         self.cfg = tests.create_config()
         self.patcher_makedirs = patch('os.makedirs')
         self.mock_makedirs = self.patcher_makedirs.start()
@@ -51,6 +49,7 @@ class TestAgentHandler(unittest.TestCase):
         self.mock_socket = self.patcher_socket.start()
         self.mock_create_ctx.return_value = self.mock_context
         self.mock_context.wrap_socket.return_value = self.mock_socket
+        print(self.settings.secret_key)
         hmac_hash = hmac.new(self.settings.secret_key, self.challenge,
                              'sha512')
         self.digest_auth = hmac_hash.hexdigest().encode("utf-8")
@@ -222,6 +221,7 @@ class TestAgentHandler(unittest.TestCase):
 
     def test_scan(self):
         from libnmap.process import NmapProcess
+
         #mmap_report = f"-oN {self.settings.outdir}/127.0.0.1.nmap"
         report_mock = mock_open()
         with patch('builtins.open', report_mock) as mock_file:

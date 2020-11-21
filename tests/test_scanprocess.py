@@ -1,7 +1,8 @@
 import unittest
-from unittest.mock import patch, call, Mock, MagicMock, PropertyMock
-from dscan.models.scanner import ScanProcess, Status
+from unittest.mock import MagicMock, Mock, PropertyMock, call, patch
+
 import tests
+from dscan.models.scanner import ScanProcess, Status
 
 
 class TestScanProcess(unittest.TestCase):

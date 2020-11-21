@@ -16,7 +16,7 @@ from enum import Enum
 from dscan import log
 from dscan.models.parsers import ReportsParser, TargetOptimization
 from dscan.models.structures import Status, Report
-from out import Display
+from dscan.out import Display
 
 from libnmap.process import NmapProcess
 
@@ -55,6 +55,7 @@ class Config:
         else:
             self.host = options.s
         # set cert properties
+
         self.sslcert = config.get(*self.SSL_CERTS[0:2:1])
         self.sslkey = config.get(*self.SSL_CERTS[0:3:2])
         self.ciphers = config.get(*self.SSL_CERTS[0:4:3])

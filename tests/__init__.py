@@ -1,8 +1,9 @@
 import io
-import os
 import logging
+import os
 from configparser import ConfigParser, ExtendedInterpolation
 from unittest.mock import Mock
+
 from dscan.models.structures import Structure
 
 log = logging.getLogger()
