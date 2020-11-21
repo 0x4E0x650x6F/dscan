@@ -10,10 +10,17 @@ import hashlib
 import os
 import pickle
 import threading
+import itertools
 from enum import Enum
 
 from dscan import log
 from dscan.models.parsers import ReportsParser, TargetOptimization
+from dscan.models.structures import Status, Report
+from out import Display
+
+from libnmap.process import NmapProcess
+
+from time import sleep
 
 
 class Config:
@@ -598,3 +605,83 @@ class Context:
         self.__dict__.update(state)
         log.info("Restoring context state")
         self._lock = threading.Lock()
+
+
+class ScanProcess:
+    """
+    Used by the agent (client side), its a proxy class
+    to provide an interface to interact with `libnmap` responsible
+    for the actual execution.
+    Its implementation allows handling, duplicate file names, with numeric
+    prefix, as well as keeping status on the execution process.
+    """
+    TASK_HEADERS = [
+        "Target", "Nª completed Scans", "Status"
+    ]
+
+    def __init__(self, output):
+        """
+        wrapper around `libnmap` scan execution
+        :param output: str path to save the reports
+        """
+        self.output = output
+        # current target aka ctarget is a tuple (target, options).
+        self.ctarget = None
+        # number of successful scans finished
+        self.number_scans = 0
+        self.display = Display()
+
+    def __inc(self):
+        """
+        increments the number_scans.
+        """
+        self.number_scans += 1
+
+    def report_name(self, extension):
+        """
+        :param extension:
+        :return: path str path and filename, the filename will be prefixed,
+        by a number if the base+extension already exists in the outdir.
+        :rtype: `str`
+        """
+        fname = self.ctarget[0].replace('/', '-')
+        path = os.path.join(self.output, f"{fname}"
+                                         f".{extension}")
+        exists = os.path.isfile(path)
+        prefix = itertools.count()
+        while exists:
+            n = next(prefix)
+            path = os.path.join(self.output, f"{n}-{fname}"
+                                             f".{extension}")
+            exists = os.path.isfile(path)
+        return path
+
+    def run(self, target, options, callback):
+        """
+        Executes the scan on a given target
+        :param target:
+        :param options:
+        :param callback: callback function to report status to the server.
+        :return: report object
+        :rtype: `dscan.models.structures.Report`
+        """
+        self.ctarget = (target, options)
+        try:
+            options = " ".join([options, f"-oN {self.report_name('nmap')}"])
+            nmap_proc = NmapProcess(targets=target, options=options,
+                                    safe_mode=False)
+            nmap_proc.run_background()
+            callback(Status.SUCCESS)
+            while nmap_proc.is_running():
+                self.display.print_table(self.TASK_HEADERS,
+                                         [(target, self.number_scans,
+                                           nmap_proc.progress)])
+                sleep(2)
+            # after finished encode and hash the contents for transfer.
+            data = nmap_proc.stdout.encode("utf-8")
+            digest = hashlib.sha512(data).hexdigest()
+            report = Report(len(data), self.report_name("xml"), digest)
+            return report
+        except Exception as ex:
+            log.error(f"something went wrong {ex}")
+            callback(Status.FAILED)

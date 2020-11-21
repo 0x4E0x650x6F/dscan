@@ -19,26 +19,8 @@ from dscan.models.structures import Structure
 from dscan.models.structures import Auth
 from dscan.models.structures import Ready
 from dscan.models.structures import Status
+from dscan.models.scanner import ScanProcess
 from string import ascii_uppercase
-
-
-class Scanner:
-    def __init__(self, output):
-        """
-        wrapper around `libnmap` scan execution
-        :param output: str path to save the reports
-        """
-        self.output = output
-
-    def run(self, target, options):
-        """
-        Executes the scan on a given target
-        :param target:
-        :param options:
-        :return: report object
-        :rtype: `dscan.models.structures.Report`
-        """
-        pass
 
 
 class Agent:
@@ -60,7 +42,7 @@ class Agent:
         self.socket = ssl_context.wrap_socket(socket(AF_INET, SOCK_STREAM),
                                               server_side=False,
                                               server_hostname=srv_hostname)
-        self.scan = Scanner(self.config.outdir)
+        self.scan = ScanProcess(self.config.outdir)
 
     def connect(self):
         """
@@ -131,13 +113,21 @@ class Agent:
                 return
 
             log.info(f"Launching scan on {cmd}")
-            report = self.scan.run(cmd.target, cmd.options)
-            self.socket.sendall(report.pack())
-
-            if self.__send_report(report):
-                log.info("Report Transfer was successful")
+            report = self.scan.run(cmd.target, cmd.options, self.send_status)
+            if report:
+                self.socket.sendall(report.pack())
+                if self.__send_report(report):
+                    log.info("Report Transfer was successful")
+                else:
+                    log.info("Report Transfer was unsuccessful")
             else:
-                log.info("Report Transfer was unsuccessful")
+                self.send_status(Status.FAILED.value)
+
+    def send_status(self, status):
+        """
+        :param status: int of a valid `dscan.models.structures.Status`
+        """
+        self.socket.sendall(struct.pack("<B", status))
 
     def __check_status(self):
         """

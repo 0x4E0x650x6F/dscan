@@ -1,12 +1,9 @@
 import hmac
 import os
-import io
 import struct
 import threading
-import logging
 import unittest
 from argparse import Namespace
-from configparser import ConfigParser, ExtendedInterpolation
 import ssl
 from socket import socket
 from socket import AF_INET
@@ -56,18 +53,26 @@ class TestAgentHandler(unittest.TestCase):
         self.hmac_patch = patch.object(hmac, 'compare_digest',
                                        return_value=True)
         self.challenge = b'4%x8p\x8d\xda\x04\xe5r\xfb\xc1Si8[' \
-                    b'\xcb\x1a\x1c\x84\xf5\xb5%\x15[' \
-                    b'\xea\x10\x96)!n\xe3\xadit\x0f\x15e\xc2\x06\xd1\xd8\xb0' \
-                    b'\xc5\x81\x87\xf2s\xe3\xd8\x95\xd1\x9c\xbdM\x8f\x9c\xd5' \
-                    b'\x14\xb3\x8e\xdd\x8eQ\xffw\x10Y8\xa5\xa5\x83\xf3\xeeQ' \
-                    b'\xa1\xfcOP\x9d\xd6\x80x\x80\x9eh\x11\xa7\xd7\xce\xcf' \
-                    b'.\xec\x01\x94S\xd4\x1d\x7f\xef\x83e\xe8\xfa\xf9`\xfb' \
-                    b'\xc6:SB\xeff\x15\r\xcb\xe9\xa4\xefO\x03i\xe9\xefoMz\x8b'
+                         b'\xcb\x1a\x1c\x84\xf5\xb5%\x15[' \
+                         b'\xea\x10\x96)!n\xe3\xadit\x0f\x15e\xc2\x06\xd1' \
+                         b'\xd8\xb0' \
+                         b'\xc5\x81\x87\xf2s\xe3\xd8\x95\xd1\x9c\xbdM\x8f' \
+                         b'\x9c\xd5' \
+                         b'\x14\xb3\x8e\xdd\x8eQ\xffw\x10Y8\xa5\xa5\x83\xf3' \
+                         b'\xeeQ' \
+                         b'\xa1\xfcOP\x9d\xd6\x80x\x80\x9eh\x11\xa7\xd7\xce' \
+                         b'\xcf' \
+                         b'.\xec\x01\x94S\xd4\x1d\x7f\xef\x83e\xe8\xfa\xf9' \
+                         b'`\xfb' \
+                         b'\xc6:SB\xeff\x15\r\xcb\xe9\xa4\xefO\x03i\xe9' \
+                         b'\xefoMz\x8b'
         self.hmac_patch.start()
-
-    def tearDown(self):
         self.addCleanup(self.patcher.stop)
         self.addCleanup(self.hmac_patch.stop)
+
+    def tearDown(self):
+        self.patcher.stop()
+        self.hmac_patch.stop()
 
     @patch('socket.socket')
     @patch('os.urandom')
@@ -89,7 +94,8 @@ class TestAgentHandler(unittest.TestCase):
 
     @patch('socket.socket')
     def test_ready(self, mock_socket):
-        buffer = BufMock(Auth(self.challenge), Ready(0, "bub"), struct.pack("<B", 0))
+        buffer = BufMock(Auth(self.challenge), Ready(0, "bub"),
+                         struct.pack("<B", 0))
         mock_socket.recv = buffer.read
 
         AgentHandler(mock_socket, ('127.0.0.1', '1234'), self.mock_server,
@@ -101,7 +107,8 @@ class TestAgentHandler(unittest.TestCase):
 
     @patch('socket.socket')
     def test_ready_failed(self, mock_socket):
-        buffer = BufMock(Auth(self.challenge), Ready(0, "bub"), struct.pack("<B", 1))
+        buffer = BufMock(Auth(self.challenge), Ready(0, "bub"),
+                         struct.pack("<B", 1))
         mock_socket.recv = buffer.read
 
         AgentHandler(mock_socket, ('127.0.0.1', '1234'), self.mock_server,

@@ -8,7 +8,8 @@ from socket import timeout
 from unittest.mock import patch, mock_open, call, MagicMock
 
 import tests
-from dscan.client import Agent, Scanner
+from dscan.client import Agent
+from dscan.models.scanner import ScanProcess
 from dscan.models.scanner import Config
 from dscan.models.structures import Auth, Command, Report, Ready
 
@@ -70,14 +71,20 @@ class TestAgentHandler(unittest.TestCase):
             call.recv(1),
             call.close()
         ]
-
-    def tearDown(self):
         self.addCleanup(self.patcher_makedirs.stop)
         self.addCleanup(self.hmac_patch.stop)
         self.addCleanup(self.patcher_defContext.stop)
         self.addCleanup(self.patcher_sslContext.stop)
         self.addCleanup(self.patcher_socket.stop)
         self.addCleanup(self.patcher_urandom.stop)
+
+    def tearDown(self):
+        self.patcher_makedirs.stop()
+        self.hmac_patch.stop()
+        self.patcher_defContext.stop()
+        self.patcher_sslContext.stop()
+        self.patcher_socket.stop()
+        self.patcher_urandom.stop()
 
     def check_mock_calls_connect_disconnect(self):
         self.mock_context.wrap_socket.assert_called_once()
@@ -162,7 +169,8 @@ class TestAgentHandler(unittest.TestCase):
         with patch('random.choice') as mock_choice:
             mock_choice.return_value = "A"
             with patch('builtins.open', report_mock):
-                patcher = patch.object(Scanner, 'run', return_value=expected)
+                patcher = patch.object(ScanProcess, 'run',
+                                       return_value=expected)
                 patcher.start()
                 agent = Agent(self.settings)
                 agent.connect()
@@ -202,7 +210,8 @@ class TestAgentHandler(unittest.TestCase):
         with patch('random.choice') as mock_choice:
             mock_choice.return_value = "A"
             with patch('builtins.open', report_mock):
-                patcher = patch.object(Scanner, 'run', return_value=expected)
+                patcher = patch.object(ScanProcess, 'run',
+                                       return_value=expected)
                 patcher.start()
                 agent = Agent(self.settings)
                 agent.connect()
@@ -210,6 +219,24 @@ class TestAgentHandler(unittest.TestCase):
                 self.mock_socket.assert_has_calls(expected_calls,
                                                   any_order=True)
                 patcher.stop()
+
+    def test_scan(self):
+        from libnmap.process import NmapProcess
+        #mmap_report = f"-oN {self.settings.outdir}/127.0.0.1.nmap"
+        report_mock = mock_open()
+        with patch('builtins.open', report_mock) as mock_file:
+            nm = NmapProcess("127.0.0.1", options=f"-sV -p22",
+                             safe_mode=False)
+            nm.run()
+
+            if nm.rc == 0:
+                print(nm.stdout)
+                digest = hashlib.sha512(nm.stdout.encode("utf-8")).hexdigest()
+                print(digest)
+
+            else:
+                print(nm.stderr)
+            print(mock_file.mock_calls)
 
 
 if __name__ == '__main__':

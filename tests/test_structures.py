@@ -36,9 +36,7 @@ class TestStructure(unittest.TestCase):
         mock_sock = self.build_mock(expected)
         with patch('socket.socket', new=mock_sock) as mock_socket:
             struct_size: int = struct.calcsize("<B")
-            op = mock_socket.recv(struct_size)
-            self.assertEqual(ord(op), Operations.AUTH)
-            result = Structure.create(1, sock=mock_socket)
+            result = Structure.create(sock=mock_socket)
             self.assertEqual(expected.data, result.data)
             self.assertEqual(digest.encode("ascii"), result.data)
             self.assertEqual(Operations.AUTH, result.op_code)
@@ -47,10 +45,7 @@ class TestStructure(unittest.TestCase):
         expected = Ready(0, 'agentx')
         mock_sock = self.build_mock(expected)
         with patch('socket.socket', new=mock_sock) as mock_socket:
-            struct_size = struct.calcsize("<B")
-            op = mock_socket.recv(struct_size)
-            self.assertEqual(ord(op), Operations.READY)
-            result = Structure.create(2, sock=mock_socket)
+            result = Structure.create(sock=mock_socket)
             self.assertEqual(expected.uid, result.uid)
             self.assertEqual(expected.alias, result.alias)
 
@@ -58,10 +53,7 @@ class TestStructure(unittest.TestCase):
         expected = Command("127.0.0.1", "-sV -Pn -p1-1000")
         mock_sock = self.build_mock(expected)
         with patch('socket.socket', new=mock_sock) as mock_socket:
-            struct_size = struct.calcsize("<B")
-            op = mock_socket.recv(struct_size)
-            self.assertEqual(ord(op), Operations.COMMAND)
-            result = Structure.create(3, sock=mock_socket)
+            result = Structure.create(sock=mock_socket)
             self.assertEqual(expected.target, result.target)
 
     def test_report_pack_unpack(self):
@@ -69,10 +61,7 @@ class TestStructure(unittest.TestCase):
         expected = Report(self.getSize(), "fu.xml", digest)
         mock_sock = self.build_mock(expected)
         with patch('socket.socket', new=mock_sock) as mock_socket:
-            struct_size = struct.calcsize("<B")
-            op = mock_socket.recv(struct_size)
-            self.assertEqual(ord(op), Operations.REPORT)
-            result = Structure.create(6, sock=mock_socket)
+            result = Structure.create(sock=mock_socket)
             self.assertEqual(expected.filesize, result.filesize)
             self.assertEqual(expected.filename, result.filename)
             self.assertEqual(expected.filehash, result.filehash)

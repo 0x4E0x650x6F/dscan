@@ -9,27 +9,10 @@ import sys
 
 
 class Display:
-    """
-    Context is displayed as a table.
-    """
+
     CLEAR_SCREEN = "\033c"
     CLEAR_CURRENT_LINE = "\033[1K\033[0G"
     TITLE = "Distributed Scan Status"
-
-    STAGES_HEADERS = [
-        "Nº Stages", "Nº Pending Tasks", "Completion %"
-    ]
-
-    ACTIVE_STAGES_HEADERS = [
-        'Stage', "Nº Targets", "Nº Finished", "Completion %"
-    ]
-
-    TASK_HEADERS = [
-        "Agent", "Stage", "Task Status", "Target Ip"
-    ]
-
-    def __init__(self, context):
-        self.ctx = context
 
     def inline(self, message):
         sys.stdout.write(self.CLEAR_CURRENT_LINE)
@@ -68,6 +51,33 @@ class Display:
             '\n'.join(format_string.format(*row) for row in result))
         sys.stdout.write("\n\n")
         sys.stdout.flush()
+
+    def show(self):
+        """
+        meant to be overwritten
+        """
+        pass
+
+
+class ContextDisplay(Display):
+    """
+    Context is displayed as a table.
+    """
+    STAGES_HEADERS = [
+        "Nº Stages", "Nº Pending Tasks", "Completion %"
+    ]
+
+    ACTIVE_STAGES_HEADERS = [
+        'Stage', "Nº Targets", "Nº Finished", "Completion %"
+    ]
+
+    TASK_HEADERS = [
+        "Agent", "Stage", "Task Status", "Target Ip"
+    ]
+
+    def __init__(self, context):
+        super().__init__()
+        self.ctx = context
 
     def show(self):
         self.print_table(self.STAGES_HEADERS, self.ctx.ctx_status(), True)
