@@ -12,6 +12,8 @@ log.setLevel(logging.DEBUG)
 
 data_path = os.path.join(os.path.dirname(__file__), "data")
 
+pwd = os.getcwd()
+
 
 def create_config():
     cfg = ConfigParser(interpolation=ExtendedInterpolation())

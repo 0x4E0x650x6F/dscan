@@ -118,13 +118,13 @@ class AgentHandler(BaseRequestHandler):
 
         command_name = f"do_{self.msg.op_code.name.lower()}"
         if not hasattr(self, command_name):
-            self.send_error(Status.FAILED)  # invalid command
+            self.send_status(Status.FAILED)  # invalid command
             return
 
         command = getattr(self, command_name)
         # the only command authorized for unauthenticated agents
         if command_name != "do_AUTH" and not self.authenticated:
-            self.send_error(Status.UNAUTHORIZED)
+            self.send_status(Status.UNAUTHORIZED)
             self.connected = False
             self.request.close()
             return
@@ -163,7 +163,7 @@ class AgentHandler(BaseRequestHandler):
         self.msg = Structure.create(self.request)
         if not self.msg:
             # something's wrong with the message!
-            self.send_error(Status.FAILED)
+            self.send_status(Status.FAILED)
             return
 
         hmac_hash = hmac.new(self.server.secret_key, challenge, 'sha512')
@@ -172,9 +172,9 @@ class AgentHandler(BaseRequestHandler):
         if hmac.compare_digest(digest, self.msg.data):
             log.info("Authenticated Successfully")
             self.authenticated = True
-            self.send_error(Status.SUCCESS)
+            self.send_status(Status.SUCCESS)
         else:
-            self.send_error(Status.UNAUTHORIZED)
+            self.send_status(Status.UNAUTHORIZED)
             self.request.close()
 
     def do_ready(self):
@@ -185,7 +185,16 @@ class AgentHandler(BaseRequestHandler):
             log.info("Waning! agent is not running as root "
                      "syn scans might abort not enough privileges!")
 
-        cmd = Command(*self.ctx.pop(self.agent))
+        target_data = self.ctx.pop(self.agent)
+        if not target_data:
+            log.info("Target is None no more targets")
+            # send empty command and terminate!
+            cmd = Command("", "")
+            self.request.sendall(cmd.pack())
+            self.connected = False
+            return
+
+        cmd = Command(*target_data)
         self.request.sendall(cmd.pack())
         status_bytes = self.request.recv(1)
 
@@ -212,28 +221,31 @@ class AgentHandler(BaseRequestHandler):
 
         file_size = self.msg.filesize
         nbytes = 0
-        report = self.ctx.get_report(self.client_address,
+        report = self.ctx.get_report(self.agent,
                                      self.msg.filename.decode("utf-8"))
-        digest = hashlib.sha512()
-        self.ctx.downloading(self.agent)
-        while nbytes < file_size:
-            data = self.request.recv(1024)
-            report.write(data)
-            digest.update(data)
-            nbytes = nbytes + len(data)
+        try:
+            digest = hashlib.sha512()
+            self.ctx.downloading(self.agent)
+            while nbytes < file_size:
+                data = self.request.recv(1024)
+                report.write(data)
+                digest.update(data)
+                nbytes = nbytes + len(data)
 
-        if not hmac.compare_digest(digest.hexdigest().encode("utf-8"),
-                                   self.msg.filehash):
-            log.info(f"Files are not equal! {digest.hexdigest()}")
-            self.send_error(Status.FAILED)
-        else:
-            log.info("files are equal!")
-            self.ctx.completed(self.agent)
+            if not hmac.compare_digest(digest.hexdigest().encode("utf-8"),
+                                       self.msg.filehash):
+                log.info(f"Files are not equal! {digest.hexdigest()}")
+                self.send_status(Status.FAILED)
+            else:
+                log.info("files are equal!")
+                self.ctx.completed(self.agent)
+                self.send_status(Status.SUCCESS)
+        finally:
+            if report:
+                report.flush()
+                report.close()
 
-        report.flush()
-        report.close()
-
-    def send_error(self, code):
-        log.info(f"Sending Error code {code}")
+    def send_status(self, code):
+        log.info(f"Sending status code {code}")
         response = struct.pack("<B", code)
         self.request.sendall(response)

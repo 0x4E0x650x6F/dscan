@@ -16,6 +16,7 @@ class Status(IntEnum):
     """
     SUCCESS = 0x00
     UNAUTHORIZED = 0x01
+    FINISHED = 0x02
     FAILED = 0xFF
 
 

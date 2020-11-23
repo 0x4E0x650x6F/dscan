@@ -60,8 +60,9 @@ class TargetOptimization:
         self.fpath = fpath
 
     def save(self, targets):
-        assert len(targets) != 0, "Empty target list"
+        assert targets, "Empty target list"
         ips = []
+
         with open(self.fpath, 'wt') as qfile:
             for target in targets:
                 try:
@@ -81,7 +82,7 @@ class TargetOptimization:
             # sorting the ip addresses.
             ips.sort(key=ipaddress.get_mixed_type_key)
             # find consecutive ip address ranges.
-            try:
+            if ips:
                 for first, last in ipaddress._find_address_range(ips):
                     ip_range = list(ipaddress.summarize_address_range(first,
                                                                       last))
@@ -92,6 +93,3 @@ class TargetOptimization:
                         qfile.write(f"{first}-{last.exploded.split('.')[3]}\n")
                     else:
                         qfile.write(f"{ip_range.pop().with_prefixlen}\n")
-            except StopIteration:
-                log.error("No hosts!")
-                pass

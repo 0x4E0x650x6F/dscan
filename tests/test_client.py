@@ -49,7 +49,6 @@ class TestAgentHandler(unittest.TestCase):
         self.mock_socket = self.patcher_socket.start()
         self.mock_create_ctx.return_value = self.mock_context
         self.mock_context.wrap_socket.return_value = self.mock_socket
-        print(self.settings.secret_key)
         hmac_hash = hmac.new(self.settings.secret_key, self.challenge,
                              'sha512')
         self.digest_auth = hmac_hash.hexdigest().encode("utf-8")
@@ -218,25 +217,6 @@ class TestAgentHandler(unittest.TestCase):
                 self.mock_socket.assert_has_calls(expected_calls,
                                                   any_order=True)
                 patcher.stop()
-
-    def test_scan(self):
-        from libnmap.process import NmapProcess
-
-        #mmap_report = f"-oN {self.settings.outdir}/127.0.0.1.nmap"
-        report_mock = mock_open()
-        with patch('builtins.open', report_mock) as mock_file:
-            nm = NmapProcess("127.0.0.1", options=f"-sV -p22",
-                             safe_mode=False)
-            nm.run()
-
-            if nm.rc == 0:
-                print(nm.stdout)
-                digest = hashlib.sha512(nm.stdout.encode("utf-8")).hexdigest()
-                print(digest)
-
-            else:
-                print(nm.stderr)
-            print(mock_file.mock_calls)
 
 
 if __name__ == '__main__':

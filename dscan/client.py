@@ -35,6 +35,7 @@ class Agent:
         """
         self.connected = False
         self.config = config
+        self.con_retries = 0
         srv_hostname = config.srv_hostname
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
@@ -53,11 +54,11 @@ class Agent:
         :rtype:
             `bool`
         """
-        con_retries = 0
+        self.con_retries = 0
         # while the connection retry is under 3 tries
         # everytime the connection is interrupted the client
         # tries to connect authenticates and requests a target!
-        while con_retries < 3:
+        while self.con_retries < 3:
             try:
                 self.socket.connect((self.config.host, self.config.port))
                 self.connected = True
@@ -66,13 +67,14 @@ class Agent:
                     self.connected = False
                     return
                 # reset the counter if connection was successful.
-                con_retries = 0
+                self.con_retries = 0
                 # if authentication was successful request a target to scan.
                 self.do_ready()
             except (timeout, ConnectionError) as e:
-                con_retries += 1
+                self.con_retries += 1
                 log.info(f"Connection Timeout - {e}")
-                log.info(f"Attempt - {con_retries} to establish connection")
+                log.info(f"Attempt - {self.con_retries} "
+                         f"to establish connection")
                 self.connected = False
             finally:
                 self.socket.close()
@@ -112,8 +114,15 @@ class Agent:
                 log.info("Unable to receive command from server")
                 return
 
+            if cmd.target.decode("utf-8") == "":
+                log.info("server Send empty target Terminating!")
+                self.con_retries = 3
+                return
+
             log.info(f"Launching scan on {cmd}")
-            report = self.scan.run(cmd.target, cmd.options, self.send_status)
+            report = self.scan.run(cmd.target.decode("utf-8"),
+                                   cmd.options.decode("utf-8"),
+                                   self.send_status)
             if report:
                 self.socket.sendall(report.pack())
                 if self.__send_report(report):

@@ -6,7 +6,7 @@ out.py
 Display the information and status.
 """
 import sys
-
+import threading
 
 class Display:
 
@@ -84,3 +84,4 @@ class ContextDisplay(Display):
         self.print_table(self.ACTIVE_STAGES_HEADERS,
                          self.ctx.active_stages_status())
         self.print_table(self.TASK_HEADERS, self.ctx.tasks_status())
+        threading.Timer(1, self.show).start()

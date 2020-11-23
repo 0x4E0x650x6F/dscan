@@ -12,15 +12,11 @@ import pickle
 import threading
 import itertools
 from enum import Enum
-
 from dscan import log
 from dscan.models.parsers import ReportsParser, TargetOptimization
 from dscan.models.structures import Status, Report
 from dscan.out import Display
-
 from libnmap.process import NmapProcess
-
-from time import sleep
 
 
 class Config:
@@ -45,7 +41,6 @@ class Config:
         with the user options
         """
         self.port = options.p
-        self.dataPath = os.path.join(os.path.dirname(__file__), "data")
         self.outdir = os.path.join(options.name, config.get(
             *self.BASE))
         os.makedirs(self.outdir, exist_ok=True)
@@ -125,7 +120,7 @@ class ServerConfig:
         cidr notation.
         :param targets: `list` of `str`
         """
-        assert len(targets) != 0, "Empty target list"
+        assert targets, "Empty target list"
         if not os.path.isfile(self.resume_path):
             queue_optimization = TargetOptimization(self.queue_path)
             queue_optimization.save(targets)
@@ -631,6 +626,7 @@ class ScanProcess:
         # number of successful scans finished
         self.number_scans = 0
         self.display = Display()
+        self.status = None
 
     def __inc(self):
         """
@@ -667,22 +663,46 @@ class ScanProcess:
         :rtype: `dscan.models.structures.Report`
         """
         self.ctarget = (target, options)
+        nmap_proc = None
         try:
             options = " ".join([options, f"-oN {self.report_name('nmap')}"])
             nmap_proc = NmapProcess(targets=target, options=options,
-                                    safe_mode=False)
-            nmap_proc.run_background()
+                                    safe_mode=False,
+                                    event_callback=self.show_status)
+
+            log.info("Nmap scan started Sending success status")
             callback(Status.SUCCESS)
-            while nmap_proc.is_running():
-                self.display.print_table(self.TASK_HEADERS,
-                                         [(target, self.number_scans,
-                                           nmap_proc.progress)])
-                sleep(2)
-            # after finished encode and hash the contents for transfer.
-            data = nmap_proc.stdout.encode("utf-8")
-            digest = hashlib.sha512(data).hexdigest()
-            report = Report(len(data), self.report_name("xml"), digest)
-            return report
+            rc = nmap_proc.run()
+            if rc == 0:
+                # after finished encode and hash the contents for transfer.
+                self.__inc()
+                data = nmap_proc.stdout.encode("utf-8")
+                report_file = self.report_name("xml")
+                with open(self.report_name("xml"), "wb") as rfile:
+                    rfile.write(data)
+                    rfile.flush()
+                digest = hashlib.sha512(data).hexdigest()
+                report = Report(len(data), os.path.basename(report_file),
+                                digest)
+                return report
+            elif rc in (3, 4):
+                callback(Status.FAILED)
+                log.error(f"Nmap Scan failed {nmap_proc.stderr}")
         except Exception as ex:
             log.error(f"something went wrong {ex}")
             callback(Status.FAILED)
+        finally:
+            if nmap_proc:
+                nmap_proc.stop()
+                # orthodox fix NmapProcess is leaving subprocess streams open.
+                subproc = getattr(nmap_proc, "_NmapProcess__nmap_proc")
+                if subproc:
+                    subproc.stdout.close()
+                    subproc.stderr.close()
+
+    def show_status(self, nmapscan=None):
+        if nmapscan.is_running() and nmapscan.current_task:
+            ntask = nmapscan.current_task
+            self.display.print_table(self.TASK_HEADERS,
+                                     [(self.ctarget[0], self.number_scans,
+                                       ntask.progress)])

@@ -56,6 +56,7 @@ class TestReportsParsers(unittest.TestCase):
             target_optimize = TargetOptimization(reports_path)
             target_optimize.save(ip_list)
             mopen.assert_has_calls(expected, any_order=True)
+            print(mopen.mock_calls)
 
     def test_ip_glob_format(self):
         targets = [
