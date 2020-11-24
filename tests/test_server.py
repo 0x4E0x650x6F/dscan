@@ -150,7 +150,8 @@ class TestAgentHandler(unittest.TestCase):
             self.ctx.completed.assert_called_with("127.0.0.1:1234")
         file.close()
 
-    def test_server(self):
+    @patch("builtins.open")
+    def test_server(self, mock_open):
 
         server = DScanServer((self.settings.host, self.settings.port),
                              AgentHandler, options=self.settings)

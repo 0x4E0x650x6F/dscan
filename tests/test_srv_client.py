@@ -14,7 +14,7 @@ from tests import create_config, data_path, log
 
 class TestCase(unittest.TestCase):
     def setUp(self):
-        targets = io.StringIO("192.168.1.223\n")
+        targets = io.StringIO("127.0.0.1\n")
         options_agent = Namespace(name='data/data_agent', s='127.0.0.1',
                                   p=9011,
                                   cmd='agent')
@@ -33,21 +33,25 @@ class TestCase(unittest.TestCase):
 
     @unittest.SkipTest
     def test_client_server_integration(self):
+
         server = DScanServer((self.settings_srv.host, self.settings_srv.port),
                              AgentHandler, options=self.settings_srv)
 
         server_thread = threading.Thread(target=server.serve_forever)
         # Exit the server thread when the main thread terminates
         server_thread.daemon = True
-        server_thread.start()
-        log.info(f"Server loop running in thread:{server_thread.name}")
-        out = ContextDisplay(server.ctx)
-        out.show()
-
         agent = Agent(self.settings_agent)
-        agent.connect()
-        server.shutdown()
-        out.stop()
+        try:
+            server_thread.start()
+            log.info(f"Server loop running in thread:{server_thread.name}")
+            out = ContextDisplay(server.ctx)
+            out.show()
+
+            agent.start()
+        except KeyboardInterrupt:
+            print("asking for shutdown !")
+            server.shutdown()
+            agent.shutdown()
 
 
 if __name__ == '__main__':

@@ -76,6 +76,8 @@ class DScanServer(ThreadingMixIn, TCPServer):
         self._terminate.set()
         super().shutdown()
         self.server_close()
+        if not self.ctx.is_finished:
+            self.options.save_context(self.ctx)
 
 
 class AgentHandler(BaseRequestHandler):
@@ -152,6 +154,9 @@ class AgentHandler(BaseRequestHandler):
                 # wait a bit, in case a shutdown was requested!
                 self._terminate.wait(1.0)
         finally:
+            if self.ctx.is_finished:
+                log.info("All stages are finished seting terminate event.")
+                self._terminate.set()
             self.request.close()
 
     def do_auth(self):

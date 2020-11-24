@@ -2,9 +2,6 @@ import io
 import logging
 import os
 from configparser import ConfigParser, ExtendedInterpolation
-from unittest.mock import Mock
-
-from dscan.models.structures import Structure
 
 log = logging.getLogger()
 log.addHandler(logging.StreamHandler())
@@ -13,6 +10,9 @@ log.setLevel(logging.DEBUG)
 data_path = os.path.join(os.path.dirname(__file__), "data")
 
 pwd = os.getcwd()
+
+if not pwd.endswith("tests"):
+    os.chdir(os.path.join(pwd, "tests"))
 
 
 def create_config():

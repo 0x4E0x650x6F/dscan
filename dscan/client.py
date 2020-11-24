@@ -9,6 +9,7 @@ import os
 import hmac
 import struct
 import random
+import threading
 from socket import socket
 from socket import AF_INET
 from socket import SOCK_STREAM
@@ -43,9 +44,19 @@ class Agent:
         self.socket = ssl_context.wrap_socket(socket(AF_INET, SOCK_STREAM),
                                               server_side=False,
                                               server_hostname=srv_hostname)
+        self._terminate = threading.Event()
         self.scan = ScanProcess(self.config.outdir)
 
-    def connect(self):
+    def is_connected(self):
+        """
+
+        :return: True if the client has disconnected or
+        the terminate event has been triggered, else False
+        :rtype `bool`
+        """
+        return self.con_retries < 3 and not self._terminate.is_set()
+
+    def start(self):
         """
         Start the client connects to the server and authenticates.
         :returns:
@@ -58,7 +69,7 @@ class Agent:
         # while the connection retry is under 3 tries
         # everytime the connection is interrupted the client
         # tries to connect authenticates and requests a target!
-        while self.con_retries < 3:
+        while self.is_connected():
             try:
                 self.socket.connect((self.config.host, self.config.port))
                 self.connected = True
@@ -78,6 +89,9 @@ class Agent:
                 self.connected = False
             finally:
                 self.socket.close()
+
+    def shutdown(self):
+        self._terminate.set()
 
     def do_auth(self):
         """

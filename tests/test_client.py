@@ -101,7 +101,7 @@ class TestAgentHandler(unittest.TestCase):
 
     def test_connect(self):
         agent = Agent(self.settings)
-        agent.connect()
+        agent.start()
         self.check_mock_calls_connect_disconnect()
 
     def test_timeout_after_auth(self):
@@ -111,13 +111,14 @@ class TestAgentHandler(unittest.TestCase):
                                struct.pack("<B", 0),
                                timeout(),
                                timeout(),
+                               timeout(),
                                timeout()
                                ]
         self.mock_socket.recv = mock_ex
         with patch('random.choice') as mock_choice:
             mock_choice.return_value = "A"
             agent = Agent(self.settings)
-            agent.connect()
+            agent.start()
             self.mock_socket.assert_has_calls(self.expected_calls_timeout)
 
     def test_reset_retry_count_timeout(self):
@@ -137,7 +138,7 @@ class TestAgentHandler(unittest.TestCase):
         with patch('random.choice') as mock_choice:
             mock_choice.return_value = "A"
             agent = Agent(self.settings)
-            agent.connect()
+            agent.start()
             self.mock_socket.assert_has_calls(self.expected_calls_timeout)
 
     @patch('os.getuid')
@@ -171,7 +172,7 @@ class TestAgentHandler(unittest.TestCase):
                                        return_value=expected)
                 patcher.start()
                 agent = Agent(self.settings)
-                agent.connect()
+                agent.start()
                 self.check_mock_calls_connect_disconnect()
                 self.mock_socket.assert_has_calls(expected_calls,
                                                   any_order=True)
@@ -212,7 +213,7 @@ class TestAgentHandler(unittest.TestCase):
                                        return_value=expected)
                 patcher.start()
                 agent = Agent(self.settings)
-                agent.connect()
+                agent.start()
                 self.check_mock_calls_connect_disconnect()
                 self.mock_socket.assert_has_calls(expected_calls,
                                                   any_order=True)

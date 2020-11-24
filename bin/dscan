@@ -1,3 +1,4 @@
 #!/bin/bash
 
 echo "[*]\tDistribuited scan"
+python3 -m dscan "$@"

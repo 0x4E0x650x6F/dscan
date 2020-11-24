@@ -84,4 +84,6 @@ class ContextDisplay(Display):
         self.print_table(self.ACTIVE_STAGES_HEADERS,
                          self.ctx.active_stages_status())
         self.print_table(self.TASK_HEADERS, self.ctx.tasks_status())
-        threading.Timer(1, self.show).start()
+
+        if not self.ctx.is_finished:
+            threading.Timer(1, self.show).start()

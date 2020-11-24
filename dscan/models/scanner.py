@@ -571,12 +571,18 @@ class Context:
             data.append(stage.as_tuple())
         return data
 
+    @property
+    def is_finished(self):
+        status = [status.isfinished for status in self.active_stages.values()]
+        log.info(status)
+        return any(status)
+
     def ctx_status(self):
         stage_comp = float(0)
         for stage in self.active_stages.values():
             stage_comp += stage.percentage
         return [(self.nstages, len(self.pending), "{:.2f}%"
-                 .format((stage_comp / float(300) * 100)))]
+                 .format((stage_comp / float(self.nstages * 100) * 100)))]
 
     def __getstate__(self):
         with self._lock:

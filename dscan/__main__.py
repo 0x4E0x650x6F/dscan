@@ -1,22 +1,72 @@
 #!/usr/bin/env python3
 # encoding: utf-8
 
+import logging
 import argparse
+import os
+import threading
+from configparser import ConfigParser, ExtendedInterpolation
 from datetime import datetime
+
+from dscan.client import Agent
+from dscan.models.scanner import Config
+from dscan.server import DScanServer
+from dscan.server import AgentHandler
+from dscan import dataPath
+from dscan.out import ContextDisplay
 
 FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
 
+def create_config(options):
+    cfg = ConfigParser(interpolation=ExtendedInterpolation())
+    data = open(os.path.join(dataPath, 'dscan.conf'))
+    cfg.read_file(data)
+    data.close()
+    return Config(cfg, options)
+
+
+def create_server(options):
+    settings = create_config(options)
+    server = DScanServer((settings.host, settings.port),
+                         AgentHandler, options=settings)
+
+    server_thread = threading.Thread(target=server.serve_forever)
+    # Exit the server thread when the main thread terminates
+    server_thread.daemon = True
+    server_thread.start()
+    logging.info(f"Server loop running in thread:{server_thread.name}")
+    out = ContextDisplay(server.ctx)
+    out.show()
+    return server
+
+
+def create_agent(options):
+    settings = create_config(options)
+    agent = Agent(settings)
+    agent_thread = threading.Thread(target=agent.start)
+    agent_thread.start()
+    return agent
+
 
 def main():
-    pass
+    worker = None
+    try:
+        if args.cmd == "agent":
+            worker = create_agent(args)
+        else:
+            worker = create_server(args)
+    except (KeyboardInterrupt, Exception) as ex:
+        logging.info("Forced shutdown was requested!")
+        logging.info(f"{ex}")
+        if worker:
+            worker.shutdown()
 
 
 if __name__ == "__main__":
     now = datetime.now().strftime("%b-%d-%Y-%H-%M")
 
-    # logging.basicConfig(filename="drecon-%s.log" % (now),
-    #                    format=FORMAT,
-    #                    level=logging.INFO)
+    logging.basicConfig(filename=f"drecon-{now}.log", format=FORMAT,
+                        level=logging.INFO)
 
     parser = argparse.ArgumentParser(prog='Distributed scanner')
     parser.add_argument('--name', type=str, required=True)
