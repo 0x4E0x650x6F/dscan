@@ -33,5 +33,5 @@ setup(
             'release': ('setup.py', release),
             'source_dir': ('setup.py', 'doc')}
     },
-    packages=find_packages(exclude=('tests'))
+    packages=find_packages(exclude='tests')
 )
