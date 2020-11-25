@@ -26,6 +26,10 @@ setup(
     ],
     scripts=['bin/dscan'],
     cmdclass=cmd_class,
+    package_data={
+          name: ['data/*.conf'],
+       },
+   include_package_data=True,
     command_options={
         'build_sphinx': {
             'project': ('setup.py', name),
