@@ -12,7 +12,7 @@ setup(
     author_email='tiago.alexand@gmail.com',
     url='www.tiagoalexandre.com',
     test_requires=[
-        "mock", "autopep8", "flake8", "isort", "sphinx",
+        "autopep8", "flake8", "isort", "sphinx",
     ],
     install_require=[
         'python-libnmap'
