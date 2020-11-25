@@ -5,7 +5,7 @@ and distribute scans across several hosts.
  
 # Install
 ```
-% git clone git@github.com:0x4E0x650x6F/dscan.git
+% git clone https://github.com/0x4E0x650x6F/dscan.git
 % cd dscan
 % pip install .
 % dscan

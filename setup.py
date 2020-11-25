@@ -1,10 +1,7 @@
 from setuptools import find_packages, setup
-from sphinx.setup_command import BuildDoc
 
 with open('README.md') as f:
     readme = f.read()
-
-cmd_class = {'build_sphinx': BuildDoc}
 
 name = 'dscan'
 version = '0.1.0'
@@ -25,17 +22,9 @@ setup(
         'python-libnmap'
     ],
     scripts=['bin/dscan'],
-    cmdclass=cmd_class,
     package_data={
           name: ['data/*.conf'],
        },
-   include_package_data=True,
-    command_options={
-        'build_sphinx': {
-            'project': ('setup.py', name),
-            'version': ('setup.py', version),
-            'release': ('setup.py', release),
-            'source_dir': ('setup.py', 'doc')}
-    },
+    include_package_data=True,
     packages=find_packages(exclude='tests')
 )
