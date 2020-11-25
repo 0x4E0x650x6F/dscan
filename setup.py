@@ -11,7 +11,12 @@ setup(
     author='0x4E0x650x6F',
     author_email='tiago.alexand@gmail.com',
     url='www.tiagoalexandre.com',
-    install_requires=[],
+    test_requires=[
+        "mock", "autopep8", "flake8", "isort", "sphinx",
+    ],
+    install_require=[
+        'python-libnmap'
+    ],
     scripts=['bin/dscan'],
     packages=find_packages(exclude=('tests'))
 )

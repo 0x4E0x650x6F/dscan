@@ -29,6 +29,12 @@ def create_config(options):
     cfg.read_file(data)
     data.close()
     config = Config(cfg, options)
+
+    handler = logging.FileHandler(os.path.join(args.name, f"drecon-{now}.log"))
+    handler.setFormatter(logging.Formatter(FORMAT))
+    log = logging.getLogger()
+    log.addHandler(handler)
+    log.setLevel(logging.DEBUG)
     return config
 
 
@@ -101,11 +107,4 @@ if __name__ == "__main__":
     now = datetime.now().strftime("%b-%d-%Y-%H-%M")
     parser = parse_args()
     args = parser.parse_args()
-
-    handler = logging.FileHandler(os.path.join(args.name, f"drecon-{now}.log"))
-    handler.setFormatter(logging.Formatter(FORMAT))
-    log = logging.getLogger()
-    log.addHandler(handler)
-    log.setLevel(logging.DEBUG)
-
     main()
