@@ -139,18 +139,22 @@ class TestSettings(unittest.TestCase):
 
     def setUp(self) -> None:
 
-        self.server_options = Namespace(name='test', b='127.0.0.1', p='2040',
+        self.server_options = Namespace(name='data', b='127.0.0.1', p='2040',
                                         cmd='srv', targets='foofile')
-        self.agent_options = Namespace(name='test', s='127.0.0.1', p='2040',
+        self.agent_options = Namespace(name='data', s='127.0.0.1', p='2040',
                                        cmd='agent')
         self.cfg = ConfigParser(interpolation=ExtendedInterpolation())
         self.data = open(os.path.join(os.path.dirname(__file__),
                                       'data/dscan.conf'))
         self.cfg.read_file(self.data)
         patcher = patch('os.makedirs')
+        mos_isfile = patch('os.path.isfile')
+        mos_isfile.return_value = True
         self.mock_makedirs = patcher.start()
+        mos_isfile.start()
         self.config = Config(self.cfg, self.server_options)
         self.addCleanup(patcher.stop)
+        self.addCleanup(mos_isfile.stop)
 
     def tearDown(self) -> None:
         self.data.close()
@@ -174,10 +178,10 @@ class TestSettings(unittest.TestCase):
 
         self.assertEqual('127.0.0.1', self.config.host)
         self.assertEqual('2040', self.config.port)
-        self.assertEqual('test/run/targets.work', self.config.queue_path)
-        self.assertEqual('test/run/live-targets.work',
+        self.assertEqual('data/run/targets.work', self.config.queue_path)
+        self.assertEqual('data/run/live-targets.work',
                          self.config.ltargets_path)
-        self.assertEqual('test/run/current.trace', self.config.resume_path)
+        self.assertEqual('data/run/current.trace', self.config.resume_path)
         self.assertEqual('data/certfile.crt', self.config.sslcert)
         self.assertEqual('data/keyfile.key', self.config.sslkey)
         self.assertEqual(self.ciphers, self.config.ciphers)
@@ -188,42 +192,42 @@ class TestSettings(unittest.TestCase):
         self.assertEqual(expect_st4, self.config.stage_list[4].options)
         self.assertEqual(expect_st5, self.config.stage_list[5].options)
         self.assertEqual(2, self.mock_makedirs.call_count)
-        self.assertEqual('test/reports', self.config.outdir)
-        self.mock_makedirs.assert_any_call('test/reports', exist_ok=True)
-        self.mock_makedirs.assert_any_call('test/run', exist_ok=True)
+        self.assertEqual('data/reports', self.config.outdir)
+        self.mock_makedirs.assert_any_call('data/reports', exist_ok=True)
+        self.mock_makedirs.assert_any_call('data/run', exist_ok=True)
 
     def test_address_optimization(self):
         with patch('builtins.open', mock_open()) as mopen:
             handle = mopen.return_value
-            self.config.target_optimization(self.targets)
-            mopen.assert_any_call('test/run/targets.work', "wt")
-            self.assertEqual(handle.write.call_count, 2)
-            handle.writelines.assert_called_once()
-            handle.write.assert_any_call('192.168.10.0/28\n')
-            handle.write.assert_any_call('192.168.12.0/24\n')
+            with patch('os.path.isfile') as misfile:
+                misfile.return_value = False
+                self.config.target_optimization(self.targets)
+                mopen.assert_any_call('data/run/targets.work', "wt")
+                self.assertEqual(handle.write.call_count, 2)
+                handle.writelines.assert_called_once()
+                handle.write.assert_any_call('192.168.10.0/28\n')
+                handle.write.assert_any_call('192.168.12.0/24\n')
 
     def test_save_context(self):
         with patch('builtins.open', mock_open()) as mopen:
             handle = mopen.return_value
             ctx = Context(self.config)
             self.config.save_context(ctx)
-            mopen.assert_any_call('test/run/current.trace', "wb")
+            mopen.assert_any_call('data/run/current.trace', "wb")
             self.assertEqual(1, handle.write.call_count)
             handle.write.assert_any_call(pickle.dumps(ctx))
 
     def test_agent(self):
         with patch('os.makedirs') as mock_makedirs:
             agent_config = Config(self.cfg, self.agent_options)
-            self.assertEqual('test/reports', agent_config.outdir)
+            self.assertEqual('data/reports', agent_config.outdir)
             self.assertEqual('127.0.0.1', agent_config.host)
             self.assertEqual('2040', agent_config.port)
             self.assertEqual('data/certfile.crt', agent_config.sslcert)
-            self.assertEqual('data/keyfile.key', agent_config.sslkey)
             self.assertEqual('dscan', agent_config.srv_hostname)
-            self.assertEqual(self.ciphers, agent_config.ciphers)
 
             self.assertEqual(1, mock_makedirs.call_count)
-            mock_makedirs.assert_any_call('test/reports', exist_ok=True)
+            mock_makedirs.assert_any_call('data/reports', exist_ok=True)
 
 
 if __name__ == '__main__':

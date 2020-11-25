@@ -49,9 +49,9 @@ class Agent:
 
     def is_connected(self):
         """
-
-        :return: True if the client has disconnected or
-        the terminate event has been triggered, else False
+        Check if the agent is still connected and not yet finished
+        :returns: True if the client has disconnected or the terminate event
+        has been triggered, else False.
         :rtype `bool`
         """
         return self.con_retries < 3 and not self._terminate.is_set()
@@ -59,11 +59,9 @@ class Agent:
     def start(self):
         """
         Start the client connects to the server and authenticates.
-        :returns:
-            True if was able to connect and authentication was successful else
-            False
-        :rtype:
-            `bool`
+        :returns: True if was able to connect and authentication was
+        successful else False
+        :rtype: `bool`
         """
         self.con_retries = 0
         # while the connection retry is under 3 tries
@@ -81,12 +79,13 @@ class Agent:
                 self.con_retries = 0
                 # if authentication was successful request a target to scan.
                 self.do_ready()
-            except (timeout, ConnectionError) as e:
+            except (timeout, ConnectionError, ValueError) as e:
                 self.con_retries += 1
-                log.info(f"Connection Timeout - {e}")
-                log.info(f"Attempt - {self.con_retries} "
-                         f"to establish connection")
+                log.error(f"Connection Timeout - {e}")
+                log.error(f"Attempt - {self.con_retries} "
+                          f"to establish connection")
                 self.connected = False
+                self.socket.close()
             finally:
                 self.socket.close()
 

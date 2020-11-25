@@ -6,10 +6,42 @@ scanner results to parse.
 import fnmatch
 import ipaddress
 import os
-
+import argparse
 from libnmap.parser import NmapParser, NmapParserException
 
 from dscan import log
+
+
+def parse_args():
+    """
+    Used by main to parse the user arguments
+    :return: argparse instance.
+    :rtype: `argparse.ArgumentParser`
+    """
+    parser = argparse.ArgumentParser(prog='Distributed scanner')
+    parser.add_argument('--name', type=str, required=True)
+
+    subparsers = parser.add_subparsers(dest='cmd')
+    subparsers.required = True
+    parser_server = subparsers.add_parser('srv')
+    parser_server.add_argument('--config', required=True)
+    parser_server.add_argument('-b', default='0.0.0.0')
+    parser_server.add_argument('-p', type=int, default=2040)
+    parser_server.add_argument('targets', type=argparse.FileType('rt'))
+    parser_agent = subparsers.add_parser('agent')
+    parser_agent.add_argument('--config', required=True)
+    parser_agent.add_argument('-s', required=True)
+    parser_agent.add_argument('-p', type=int, default=2040)
+    parser_config = subparsers.add_parser('config')
+    parser_config.add_argument("-email", type=str, required=True)
+    parser_config.add_argument("-cn", type=str, required=True)
+    parser_config.add_argument("-c", type=str, required=True)
+    parser_config.add_argument("-l", type=str, required=True)
+    parser_config.add_argument("-st", type=str, required=True)
+    parser_config.add_argument("-o", type=str, required=True)
+    parser_config.add_argument("-ou", type=str, required=True)
+    parser_config.add_argument("-days", type=int, required=True)
+    return parser
 
 
 class ReportsParser:

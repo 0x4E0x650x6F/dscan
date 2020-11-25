@@ -15,7 +15,7 @@ from dscan.models.structures import Auth, Command, Ready, Report
 
 class TestAgentHandler(unittest.TestCase):
     def setUp(self):
-        options = Namespace(name='test', s='127.0.0.1', p=2040,
+        options = Namespace(name='data', s='127.0.0.1', p=2040,
                             cmd='agent')
         self.challenge = b'4%x8p\x8d\xda\x04\xe5r\xfb\xc1Si8[' \
                          b'\xcb\x1a\x1c\x84\xf5\xb5%\x15[' \
@@ -33,6 +33,9 @@ class TestAgentHandler(unittest.TestCase):
                          b'\xefoMz\x8b'
         self.cfg = tests.create_config()
         self.patcher_makedirs = patch('os.makedirs')
+        mos_isfile = patch('os.path.isfile')
+        mos_isfile.return_value = True
+        mos_isfile.start()
         self.mock_makedirs = self.patcher_makedirs.start()
         self.settings = Config(self.cfg, options)
         self.hmac_patch = patch.object(hmac, 'compare_digest',
@@ -62,12 +65,25 @@ class TestAgentHandler(unittest.TestCase):
             call.sendall(Ready(os.getuid(), "AAAAAA").pack()),
             call.recv(1),
             call.close(),
-            call.connect(('127.0.0.1', 2040)),
-            call.recv(1),
             call.close(),
             call.connect(('127.0.0.1', 2040)),
             call.recv(1),
-            call.close()
+            call.__bool__(),
+            call.recv(128),
+            call.sendall(Auth(self.digest_auth).pack()),
+            call.recv(1),
+            call.sendall(Ready(os.getuid(), "AAAAAA").pack()),
+            call.recv(1),
+            call.close(),
+            call.close(),
+            call.connect(('127.0.0.1', 2040)),
+            call.recv(1),
+            call.close(),
+            call.close(),
+            call.connect(('127.0.0.1', 2040)),
+            call.recv(1),
+            call.close(),
+            call.close(),
         ]
         self.addCleanup(self.patcher_makedirs.stop)
         self.addCleanup(self.hmac_patch.stop)
@@ -75,6 +91,7 @@ class TestAgentHandler(unittest.TestCase):
         self.addCleanup(self.patcher_sslContext.stop)
         self.addCleanup(self.patcher_socket.stop)
         self.addCleanup(self.patcher_urandom.stop)
+        self.addCleanup(mos_isfile.stop)
 
     def tearDown(self):
         self.patcher_makedirs.stop()
@@ -114,12 +131,32 @@ class TestAgentHandler(unittest.TestCase):
                                timeout(),
                                timeout()
                                ]
+        expected = [
+            call.connect(('127.0.0.1', 2040)),
+            call.recv(1),
+            call.__bool__(),
+            call.recv(128),
+            call.sendall(Auth(self.digest_auth).pack()),
+            call.recv(1),
+            call.sendall(Ready(os.getuid(), "AAAAAA").pack()),
+            call.recv(1),
+            call.close(),
+            call.close(),
+            call.connect(('127.0.0.1', 2040)),
+            call.recv(1),
+            call.close(),
+            call.close(),
+            call.connect(('127.0.0.1', 2040)),
+            call.recv(1),
+            call.close(),
+            call.close(),
+        ]
         self.mock_socket.recv = mock_ex
         with patch('random.choice') as mock_choice:
             mock_choice.return_value = "A"
             agent = Agent(self.settings)
             agent.start()
-            self.mock_socket.assert_has_calls(self.expected_calls_timeout)
+            self.mock_socket.assert_has_calls(expected)
 
     def test_reset_retry_count_timeout(self):
         mock_ex = MagicMock()

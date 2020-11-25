@@ -156,8 +156,7 @@ class Command(Structure):
     """
     Scan task information !
     Send by the server to the agent.
-    final format is
-     |op code|target size|target|options size|options|  <BB?s?s
+    final format is  <BB?s?s
     """
     __slots__ = ('target', "options")
     _format = ('<BB', '{0}s{1}s')

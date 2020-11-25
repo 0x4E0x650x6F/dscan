@@ -40,6 +40,7 @@ class Config:
         :param options: argument parser `argparse.ArgumentParser`
         with the user options
         """
+        self.wspace = options.name
         self.port = options.p
         self.outdir = os.path.join(options.name, config.get(
             *self.BASE))
@@ -47,14 +48,18 @@ class Config:
         self.config = None
         if options.cmd == 'srv':
             self.config = ServerConfig(config, options, self.outdir)
+            self.sslkey = self.get_workPath(config.get(*self.SSL_CERTS[0:3:2]))
+            assert os.path.isfile(
+                self.sslkey), "Certificate Private key not found"
+            self.ciphers = config.get(*self.SSL_CERTS[0:4:3])
         else:
             self.host = options.s
         # set cert properties
 
-        self.sslcert = config.get(*self.SSL_CERTS[0:2:1])
-        self.sslkey = config.get(*self.SSL_CERTS[0:3:2])
-        self.ciphers = config.get(*self.SSL_CERTS[0:4:3])
+        self.sslcert = self.get_workPath(config.get(*self.SSL_CERTS[0:2:1]))
         self.srv_hostname = config.get(*self.SSL_CERTS[0:5:4])
+
+        assert os.path.isfile(self.sslcert), "Certificate file not found"
 
         digest: hashlib.sha512 = hashlib.sha512()
         try:
@@ -63,6 +68,10 @@ class Config:
                 self.secret_key = digest.hexdigest().encode("utf-8")
         except OSError as ex:
             log.error(f"failed to open cert file {ex}")
+            raise ex
+
+    def get_workPath(self, path):
+        return os.path.join(self.wspace, path)
 
     def __getattr__(self, name):
         if hasattr(self.config, name):
@@ -575,7 +584,7 @@ class Context:
     def is_finished(self):
         status = [status.isfinished for status in self.active_stages.values()]
         log.info(status)
-        return any(status)
+        return all(status) and len(status) == self.nstages
 
     def ctx_status(self):
         stage_comp = float(0)
@@ -642,7 +651,9 @@ class ScanProcess:
 
     def report_name(self, extension):
         """
-        :param extension:
+        Checks if a report with the current target.extention exists,
+        and prepends a number if it does.
+        :param extension: xml, nmap
         :return: path str path and filename, the filename will be prefixed,
         by a number if the base+extension already exists in the outdir.
         :rtype: `str`
@@ -690,6 +701,7 @@ class ScanProcess:
                 digest = hashlib.sha512(data).hexdigest()
                 report = Report(len(data), os.path.basename(report_file),
                                 digest)
+                self.print(target, 100)
                 return report
             elif rc in (3, 4):
                 callback(Status.FAILED)
@@ -706,9 +718,14 @@ class ScanProcess:
                     subproc.stdout.close()
                     subproc.stderr.close()
 
+    def print(self, target, progress):
+        self.display.print_table(self.TASK_HEADERS,
+                                 [(target, self.number_scans,
+                                   progress)], clear=True)
+
     def show_status(self, nmapscan=None):
         if nmapscan.is_running() and nmapscan.current_task:
             ntask = nmapscan.current_task
             self.display.print_table(self.TASK_HEADERS,
                                      [(self.ctarget[0], self.number_scans,
-                                       ntask.progress)])
+                                       ntask.progress)], clear=True)

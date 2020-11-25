@@ -2,12 +2,14 @@
 # encoding: utf-8
 
 import logging
-import argparse
 import os
 import threading
+import shutil
+from subprocess import Popen
+from subprocess import PIPE
 from configparser import ConfigParser, ExtendedInterpolation
 from datetime import datetime
-import shutil
+from dscan.models.parsers import parse_args
 from dscan.client import Agent
 from dscan.models.scanner import Config
 from dscan.server import DScanServer
@@ -22,18 +24,17 @@ def create_config(options):
     cfg = ConfigParser(interpolation=ExtendedInterpolation())
     conf_path = os.path.join(dataPath, 'dscan.conf')
     if options.config:
-        conf_path = options.config
+        conf_path = os.path.join(options.name, options.config)
     data = open(conf_path)
     cfg.read_file(data)
     data.close()
     config = Config(cfg, options)
-    config.target_optimization(options.targets)
     return config
 
 
 def create_server(options):
-
     settings = create_config(options)
+    settings.target_optimization(options.targets)
     server = DScanServer((settings.host, settings.port),
                          AgentHandler, options=settings)
 
@@ -71,6 +72,20 @@ def setup_config(options):
     os.makedirs(options.name, exist_ok=True)
     shutil.copy(os.path.join(dataPath, "dscan.conf"),
                 os.path.join(options.name, "dscan.conf"))
+    shutil.copy(os.path.join(dataPath, "agent.conf"),
+                os.path.join(options.name, "agent.conf"))
+
+    subj = f"/C={options.c}/ST={options.st}/L={options.l}" \
+           f"/O={options.o}/OU={options.ou}/" \
+           f"CN={options.cn}/emailAddress={options.email}"
+
+    ssl_args = ['req', '-newkey', 'rsa:2048', '-nodes', '-keyout',
+                os.path.join(options.name, 'keyfile.key'), '-x509', '-days',
+                '3650', '-out', os.path.join(options.name, 'certfile.crt'),
+                '-subj', subj
+                ]
+    with Popen(["openssl", *ssl_args], stdout=PIPE) as proc:
+        print(proc.stdout.read())
 
 
 def main():
@@ -84,22 +99,13 @@ def main():
 
 if __name__ == "__main__":
     now = datetime.now().strftime("%b-%d-%Y-%H-%M")
-
-    logging.basicConfig(filename=f"drecon-{now}.log", format=FORMAT,
-                        level=logging.DEBUG)
-
-    parser = argparse.ArgumentParser(prog='Distributed scanner')
-    parser.add_argument('--name', type=str, required=True)
-    parser.add_argument('--config', required=True)
-    subparsers = parser.add_subparsers(dest='cmd')
-    subparsers.required = True
-    parser_server = subparsers.add_parser('srv')
-    parser_server.add_argument('-b', default='0.0.0.0')
-    parser_server.add_argument('-p', type=int, default=2040)
-    parser_server.add_argument('targets', type=argparse.FileType('rt'))
-    parser_agent = subparsers.add_parser('agent')
-    parser_agent.add_argument('-s', required=True)
-    parser_agent.add_argument('-p', type=str, default='2040')
-    parser_agent = subparsers.add_parser('config')
+    parser = parse_args()
     args = parser.parse_args()
+
+    handler = logging.FileHandler(os.path.join(args.name, f"drecon-{now}.log"))
+    handler.setFormatter(logging.Formatter(FORMAT))
+    log = logging.getLogger()
+    log.addHandler(handler)
+    log.setLevel(logging.DEBUG)
+
     main()

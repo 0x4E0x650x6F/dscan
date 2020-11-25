@@ -95,14 +95,17 @@ class AgentHandler(BaseRequestHandler):
     def agent(self):
         return "{}:{}".format(*self.client_address)
 
+    @property
     def is_connected(self):
         """
-
+        Check if the client is still connected, the terminate event has not
+        been set and all stages are finished or not.
         :return: True if the client has disconnected or
         the terminate event has been triggered, else False
         :rtype `bool`
         """
-        return self.connected or not self._terminate.is_set()
+        return self.connected and not self._terminate.is_set() \
+            and not self.ctx.is_finished
 
     def dispatcher(self):
         """
@@ -137,7 +140,7 @@ class AgentHandler(BaseRequestHandler):
         log.info(f"{self.client_address} connected!")
         self.connected = True
         try:
-            while self.is_connected():
+            while self.is_connected:
                 try:
                     # start by requesting authentication
                     if not self.authenticated:
@@ -155,8 +158,8 @@ class AgentHandler(BaseRequestHandler):
                 self._terminate.wait(1.0)
         finally:
             if self.ctx.is_finished:
-                log.info("All stages are finished seting terminate event.")
-                self._terminate.set()
+                log.info("All stages are finished sending terminate event.")
+                self.server.shutdown()
             self.request.close()
 
     def do_auth(self):
