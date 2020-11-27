@@ -328,7 +328,7 @@ class TestRuntimeContext(FileSystemMockTestCase):
         nstages, pending, completion = restored_ctx.ctx_status()[0]
         self.assertEqual(3, nstages)
         self.assertEqual(0, pending)
-        self.assertEqual("33.33%", completion)
+        self.assertEqual("66.67%", completion)
         self.assertEqual("stage1", restored_ctx.cstage_name)
 
     @patch("os.stat")

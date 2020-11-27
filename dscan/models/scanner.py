@@ -246,12 +246,17 @@ class File:
     def __setstate__(self, state):
         # Restore instance attributes (i.e., _path and nlines ...).
         self.__dict__.update(state)
-        # Restore the previously opened file's state.
-        log.info(f"restoring file: {self._path} loc:{self.loc} state")
-        fd = open(self._path, self.mode)
+        fd = None
+        # if the loc is 0 then we have an uninitialized stage
+        # that depends on unfinished stage, will be opened when the first
+        # time a target is pulled.
+        if self.loc != 0 and self.exists():
+            # Restore the previously opened file's state.
+            log.info(f"restoring file: {self._path} loc:{self.loc} state")
+            fd = open(self._path, self.mode)
 
-        # set the file to the prev location.
-        fd.seek(self.loc)
+            # set the file to the prev location.
+            fd.seek(self.loc)
         self._fd = fd
 
     def __len__(self):
