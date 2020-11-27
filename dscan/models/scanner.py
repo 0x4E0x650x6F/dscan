@@ -656,7 +656,7 @@ class ScanProcess:
 
     def report_name(self, extension):
         """
-        Checks if a report with the current target.extention exists,
+        Checks if a report with the current target.extension exists,
         and prepends a number if it does.
         :param extension: xml, nmap
         :return: path str path and filename, the filename will be prefixed,
