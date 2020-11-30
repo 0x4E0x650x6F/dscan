@@ -35,10 +35,11 @@ class Config:
         """
         Holds the configuration parameters
         used at runtime for both server and agent!
+
         :param config: configparser with the configuration
         :type config: `configparser.ConfigParser`
         :param options: argument parser `argparse.ArgumentParser`
-        with the user options
+            with the user options
         """
         self.wspace = options.name
         self.port = options.p
@@ -95,7 +96,7 @@ class ServerConfig:
         :param config: configparser with the configuration
         :type config: `configparser.ConfigParser`
         :param options: argument parser `argparse.ArgumentParser`
-        with the user options
+            with the user options
         """
         self.outdir = outdir
         self.rundir = os.path.join(
@@ -127,7 +128,9 @@ class ServerConfig:
         """
         Takes a list of ip Addresses and groups all sequential ips in
         cidr notation.
+
         :param targets: `list` of `str`
+        :type: `list` of `str`
         """
         assert targets, "Empty target list"
         if not os.path.isfile(self.resume_path):
@@ -137,6 +140,7 @@ class ServerConfig:
     def save_context(self, ctx):
         """
         Serializes the context to resume later.
+
         :param ctx: instance of `Context`
         :type ctx: `Context`
         """
@@ -153,7 +157,7 @@ class File:
 
     def __init__(self, path):
         """
-        :param path:
+        :param path: string of path to the file to open.
         :type path: `str` File path
         """
         self._path = path
@@ -182,7 +186,8 @@ class File:
 
     def isempty(self):
         """
-        Check if the file is emtpy
+        Check if the file is emtpy.
+
         :return: `True` if the file is empty
         """
         assert self.exists(), f"{self._path} is not a valid file"
@@ -195,7 +200,8 @@ class File:
     def exists(self):
         """
         Returns a Boolean if the path is a valid file.
-        proxy call to `os.path.isfile`
+            proxy call to `os.path.isfile`.
+
         :return: `True` if path is a valid file.
         """
         return os.path.isfile(self._path)
@@ -302,9 +308,9 @@ class Task:
 
     def __init__(self, stage_name, options, target):
         """
-        :param stage_name:
-        :param options:
-        :param target:
+        :param stage_name: stage name
+        :param options: scan options.
+        :param target: target ip address.
         :type stage_name: `str`
         :type options: `str`
         :type target: `str`
@@ -321,6 +327,7 @@ class Task:
     def as_tuple(self):
         """
         returns a tuple with the target and scan options.
+
         :return: tuple options, target
         :rtype tuple:
         """
@@ -346,7 +353,8 @@ class Stage:
 
     def next_task(self):
         """
-        Get next target from the file
+        Get next target from the file.
+
         :return: Task.
         :rtype: `Task`
         """
@@ -368,6 +376,13 @@ class Stage:
 
     @property
     def isfinished(self):
+        """
+        Returns True if the number of lines is equal to the number of
+            finished targets.
+
+        :return: bool
+        :rtype: `bool`
+        """
         if self.targets.nlines == self.ftargets:
             return True
         else:
@@ -375,12 +390,25 @@ class Stage:
 
     @property
     def percentage(self):
+        """
+        Calculates the completion of this stage.
+
+        :return: float of of the % completion.
+        :rtype: `float`
+        """
         if self.ftargets > 0:
             return float(self.ftargets) / float(self.targets.nlines) * 100
         else:
             return float(0)
 
     def as_tuple(self):
+        """
+        Returns the information as tuple, nlines, finished targets and %,
+        used by Display to print scanner status.
+
+        :return: tuple of strings.
+        :rtype: `tuple` of `str`.
+        """
         return self.name, self.targets.nlines, self.ftargets, \
                f"{self.percentage:.2f}%"
 
@@ -395,6 +423,10 @@ class DiscoveryStage(Stage):
         self.ltargets_path = ltargets_path
 
     def process_results(self):
+        """
+        When this stage is finished the `Context` will call this method to
+        create a list of live targets.
+        """
         results_parser = ReportsParser(self.reports_path, 'discovery-*.xml')
         live_queue = TargetOptimization(self.ltargets_path)
         live_queue.save(results_parser.hosts_up())
@@ -424,11 +456,12 @@ class Context:
         Pending tasks are tasks that are canceled or restored from a previous
         interrupted session.
         If a stage is finished (no more targets), the next stage will take
-        another stage from the list until its finished!
+        another stage from the list until its finished.
+
         :param agent:
-        str with ipaddress and port in ip:port format, this allows the
-        server to manage multiple agents in one host.
-        to run multiple clients at once.
+            str with ipaddress and port in ip:port format, this allows the
+            server to manage multiple agents in one host.
+            to run multiple clients at once.
         :return: A target to scan! `task`
         :rtype: `tuple`
         """
@@ -470,21 +503,49 @@ class Context:
                 return task.as_tuple()[2:]
 
     def completed(self, agent):
+        """
+        Marks a agent task as complete.
+
+        :param agent: ip:port of agent
+        :type agent: `str`
+        """
         self._update_task_status(agent, STATUS.COMPLETED)
 
     def downloading(self, agent):
+        """
+        Marks a agent task as Downloading, notifying that the report
+        download has started.
+
+        :param agent: ip:port of agent
+        :type agent: `str`
+        """
         self._update_task_status(agent, STATUS.DOWNLOADING)
 
     def interrupted(self, agent):
+        """
+        Marks a task as interrupted, when agent disconnects for example.
+
+        :param agent: ip:port of agent
+        :type agent: `str`
+        """
         self._update_task_status(agent, STATUS.INTERRUPTED)
 
     def running(self, agent):
+        """
+        After the server sends a target the agent notifies the task has
+        started.
+
+        :param agent: ip:port of agent
+        :type agent: `str`
+        """
         self._update_task_status(agent, STATUS.RUNNING)
 
     def get_report(self, agent, file_name):
         """
         :param agent: str with ipaddress and port in ip:port format
+        :type agent: `str`
         :param file_name: name of the file sent by the agent.
+        :type file_name: `str`
         :return: file descriptor to save the scan report.
         """
         try:
@@ -502,6 +563,7 @@ class Context:
         """
         Internal method updates  a task of a given stage status, its also
         responsible for managing the interrupted tasks.
+
         :param agent: str with ipaddress and port in ip:port format
         :param status: `STATUS` value to change.
         """
@@ -525,7 +587,7 @@ class Context:
     def __cstage(self, force_next=False):
         """
         :param force_next: if True wil force the stage to advance one step
-        defaults to False
+        defaults to False.
         :type force_next: `bool`
         :return: An instance of `stage`
         :rtype: `stage`
@@ -574,12 +636,20 @@ class Context:
             return cls(options)
 
     def tasks_status(self):
+        """
+        :return: list of tuple of active task's status.
+        :rtype: `list` of `tuple`s
+        """
         data = []
         for agent, task in self.active.items():
             data.append((agent, *task.as_tuple()[:3]))
         return data
 
     def active_stages_status(self):
+        """
+        :return: list of tuples with active stages status.
+        :rtype: `list` of `tuples`
+        """
         data = []
         for stage in self.active_stages.values():
             data.append(stage.as_tuple())
@@ -587,6 +657,10 @@ class Context:
 
     @property
     def is_finished(self):
+        """
+        :return: bool iterates the active stages and collects all the
+            `finished` properties, returns `True` if all of them are true.
+        """
         status = [status.isfinished for status in self.active_stages.values()]
         return all(status) and len(status) == self.nstages
 
@@ -657,9 +731,10 @@ class ScanProcess:
         """
         Checks if a report with the current target.extension exists,
         and prepends a number if it does.
-        :param extension: xml, nmap
+
+        :param extension: xml, nmap.
         :return: path str path and filename, the filename will be prefixed,
-        by a number if the base+extension already exists in the outdir.
+            by a number if the base+extension already exists in the outdir.
         :rtype: `str`
         """
         fname = self.ctarget[0].replace('/', '-')
@@ -676,7 +751,8 @@ class ScanProcess:
 
     def run(self, target, options, callback):
         """
-        Executes the scan on a given target
+        Executes the scan on a given target.
+
         :param target:
         :param options:
         :param callback: callback function to report status to the server.
@@ -728,6 +804,11 @@ class ScanProcess:
                                    progress)], clear=True)
 
     def show_status(self, nmapscan=None):
+        """
+        :param nmapscan: takes `libnmap.process.NmapProcess` instance
+            to display the current status of the scan.
+        :type nmapscan: `libnmap.process.NmapProcess`
+        """
         if nmapscan.is_running() and nmapscan.current_task:
             ntask = nmapscan.current_task
             self.display.print_table(self.TASK_HEADERS,

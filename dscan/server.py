@@ -40,13 +40,18 @@ class DScanServer(ThreadingMixIn, TCPServer):
 
     @property
     def secret_key(self):
+        """
+        :return: str secret key generated in the config based on the
+            certificate
+        """
         return self.options.secret_key
 
     def get_request(self) -> tuple:
         """
         Used to add ssl support.
+
         :return: returns a `ssl.wrap_socket`
-        :rtype ´ssl.wrap_socket´
+        :rtype: ´ssl.wrap_socket´
         """
         # noinspection PyTupleAssignmentBalance
         client, addr = super().get_request()
@@ -64,6 +69,7 @@ class DScanServer(ThreadingMixIn, TCPServer):
     def finish_request(self, request, client_address) -> BaseRequestHandler:
         """
         Finish one request by instantiating RequestHandlerClass.
+
         :return: `RequestHandlerClass`
         :rtype: ´RequestHandlerClass´
         """
@@ -72,7 +78,9 @@ class DScanServer(ThreadingMixIn, TCPServer):
                                         context=self.ctx)
 
     def shutdown(self):
-        # an override to allow a local terminate event to be set!
+        """
+         An override to allow a local terminate event to be set!
+        """
         self._terminate.set()
         super().shutdown()
         self.server_close()
@@ -82,7 +90,10 @@ class DScanServer(ThreadingMixIn, TCPServer):
 
 class AgentHandler(BaseRequestHandler):
     HEADER = "<B"
-
+    """
+    Created when an agent connects, holds all the agents available actions.
+    Terminates when scan targets finishes or an agent disconnects.
+    """
     def __init__(self, *args, terminate_event, context, **kwargs):
         self._terminate = terminate_event
         self.ctx = context
@@ -93,6 +104,11 @@ class AgentHandler(BaseRequestHandler):
 
     @property
     def agent(self):
+        """
+        string representation of a connection ip:port.
+
+        :return: str format of agent name ip:port
+        """
         return "{}:{}".format(*self.client_address)
 
     @property
@@ -100,17 +116,17 @@ class AgentHandler(BaseRequestHandler):
         """
         Check if the client is still connected, the terminate event has not
         been set and all stages are finished or not.
+
         :return: True if the client has disconnected or
-        the terminate event has been triggered, else False
-        :rtype `bool`
+            the terminate event has been triggered, else False
+        :rtype: `bool`
         """
         return self.connected and not self._terminate.is_set() \
             and not self.ctx.is_finished
 
     def dispatcher(self):
         """
-        Command dispatcher all logic
-        to decode and dispatch the call
+        Command dispatcher all logic to decode and dispatch the call.
         """
         self.msg = Structure.create(self.request)
         if not self.msg:
@@ -137,6 +153,12 @@ class AgentHandler(BaseRequestHandler):
         command()
 
     def handle(self):
+        """
+        First method to be called by `BaseRequestHandler`.
+        responsible for initial call to authentication `do_auth`,
+        and `dispatcher`, the connection is kept alive as long as agent is
+        connected and their are targets to be delivered.
+        """
         log.info(f"{self.client_address} connected!")
         self.connected = True
         try:
@@ -163,6 +185,9 @@ class AgentHandler(BaseRequestHandler):
             self.request.close()
 
     def do_auth(self):
+        """
+        Handles the agent's authentication.
+        """
         log.info(f"{self.client_address} initialized Authentication")
         challenge = os.urandom(128)
         self.request.sendall(Auth(challenge).pack())
@@ -186,6 +211,11 @@ class AgentHandler(BaseRequestHandler):
             self.request.close()
 
     def do_ready(self):
+        """
+        After the authentication the agent notifies the server, that is
+        ready to start scanning.
+        This will handle the request and send a target to be scanned.
+        """
         log.info("is Ready for targets")
 
         log.info(f"Agent is running with uid {self.msg.uid}")
@@ -223,6 +253,13 @@ class AgentHandler(BaseRequestHandler):
             self.ctx.interrupted(self.agent)
 
     def do_report(self):
+        """
+        When the scan the ends, the agent notifies the server that is ready
+        to send the report.
+        This method will handle the report transfer save the report in the
+        reports directory and make the target as finished
+        if the file hashes match.
+        """
         log.info("Agent Reporting Complete Scan!")
         log.info(f"Filename {self.msg.filename} total file size "
                  f"{self.msg.filesize} file hash {self.msg.filehash}")
@@ -254,6 +291,12 @@ class AgentHandler(BaseRequestHandler):
                 report.close()
 
     def send_status(self, code):
+        """
+        Sends a status code to the server.
+
+        :param code:
+        :type code: `dscan.models.structures.Status`
+        """
         log.info(f"Sending status code {code}")
         response = struct.pack("<B", code)
         self.request.sendall(response)

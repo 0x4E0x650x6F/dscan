@@ -26,13 +26,12 @@ from string import ascii_uppercase
 
 class Agent:
     """
-    Dscan client.
+    Agent client implementation.
     """
     def __init__(self, config):
         """
-        Agent client implementation
-        :param config: `dscan.models.scanner.Config` instance with the
-        runtime configurations.
+        :param config: `dscan.models.scanner.Config`
+        instance with the runtime configurations.
         """
         self.connected = False
         self.config = config
@@ -49,18 +48,20 @@ class Agent:
 
     def is_connected(self):
         """
-        Check if the agent is still connected and not yet finished
-        :returns: True if the client has disconnected or the terminate event
-        has been triggered, else False.
-        :rtype `bool`
+        Check if the agent is still connected and not yet finished.
+
+        :return: `True` if the client has disconnected or the terminate event
+            has been triggered, else False.
+        :rtype: `bool`
         """
         return self.con_retries < 3 and not self._terminate.is_set()
 
     def start(self):
         """
         Start the client connects to the server and authenticates.
-        :returns: True if was able to connect and authentication was
-        successful else False
+
+        :return: True if was able to connect and authentication was
+            successful else False.
         :rtype: `bool`
         """
         self.con_retries = 0
@@ -90,11 +91,18 @@ class Agent:
                 self.socket.close()
 
     def shutdown(self):
+        """
+        Set the terminate event On, to shutdown the agent.
+        """
         self._terminate.set()
 
     def do_auth(self):
         """
-        Initiate the authentication
+        Initiate the authentication.
+
+        :return: True if the status code of the last operation is
+            `dscan.models.structures.Status.SUCCESS` False otherwise.
+        :rtype: `bool`
         """
         log.info("Initiating authentication")
         opr = Structure.create(self.socket)

@@ -14,7 +14,8 @@ from dscan import log
 
 def parse_args():
     """
-    Used by main to parse the user arguments
+    Used by main to parse the user arguments.
+
     :return: argparse instance.
     :rtype: `argparse.ArgumentParser`
     """
@@ -59,6 +60,10 @@ class ReportsParser:
         self.pattern = pattern
 
     def hosts_up(self):
+        """
+        :return: list of hosts up.
+        :rtype: `list`
+        """
         hosts_up = []
         for host in self.__walk():
             if host.is_up():
@@ -83,8 +88,8 @@ class ReportsParser:
 class TargetOptimization:
     """
     This class takes lists of hosts or networks, and attempts to optimize
-    them by either split big cidr like /8 /16 in /24 or in rage format
-    192.168.10.1-4.
+        them by either split big cidr like /8 /16 in /24 or in rage format
+        192.168.10.1-4.
     """
 
     def __init__(self, fpath, cidr="/24"):
@@ -92,6 +97,12 @@ class TargetOptimization:
         self.fpath = fpath
 
     def save(self, targets):
+        """
+        Takes a list of targets to optimize and saves it in the workspace path.
+
+        :param targets: `list` of targets (`str` and top optimize.
+        :type: targets: `list` of `str`
+        """
         assert targets, "Empty target list"
         ips = []
 
