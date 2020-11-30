@@ -7,8 +7,8 @@ with open('LICENSE') as f:
     license_text = f.read()
 
 name = 'dscan-4E656F'
-version = '0.1.0'
-release = '0.1.0'
+version = '0.1.1'
+release = '0.1.1'
 
 setup(
     name=name,

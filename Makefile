@@ -42,4 +42,8 @@ test: lint
 docs: clean-build
 	cd docs && make html
 
+upload: clean-build
+	python3 setup.py sdist bdist_wheel
+	python3 -m twine upload --repository pypi dist/*
+
 .PHONY: clean-pyc clean-build
