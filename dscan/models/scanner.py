@@ -410,7 +410,7 @@ class Stage:
         :rtype: `tuple` of `str`.
         """
         return self.name, self.targets.nlines, self.ftargets, \
-               f"{self.percentage:.2f}%"
+            f"{self.percentage:.2f}%"
 
     def close(self):
         self.targets.close()
