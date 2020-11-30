@@ -588,7 +588,6 @@ class Context:
     @property
     def is_finished(self):
         status = [status.isfinished for status in self.active_stages.values()]
-        log.info(status)
         return all(status) and len(status) == self.nstages
 
     def ctx_status(self):

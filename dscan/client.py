@@ -141,7 +141,7 @@ class Agent:
                 if self.__send_report(report):
                     log.info("Report Transfer was successful")
                 else:
-                    log.info("Report Transfer was unsuccessful")
+                    log.error("Report Transfer was unsuccessful")
             else:
                 self.send_status(Status.FAILED.value)
 
@@ -171,7 +171,7 @@ class Agent:
             log.info("Operation Successful ...")
             return True
         else:
-            log.info("Operation unsuccessful disconnecting...")
+            log.error("Operation unsuccessful disconnecting...")
             return False
 
     def __send_report(self, report, retry=0):

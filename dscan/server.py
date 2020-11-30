@@ -217,7 +217,7 @@ class AgentHandler(BaseRequestHandler):
             log.info("Started scanning !")
             self.ctx.running(self.agent)
         else:
-            log.info("Scan command returned Error")
+            log.error("Scan command returned Error")
             log.info("Server is Terminating connection!")
             self.connected = False
             self.ctx.interrupted(self.agent)
@@ -242,7 +242,7 @@ class AgentHandler(BaseRequestHandler):
 
             if not hmac.compare_digest(digest.hexdigest().encode("utf-8"),
                                        self.msg.filehash):
-                log.info(f"Files are not equal! {digest.hexdigest()}")
+                log.error(f"Files are not equal! {digest.hexdigest()}")
                 self.send_status(Status.FAILED)
             else:
                 log.info("files are equal!")
