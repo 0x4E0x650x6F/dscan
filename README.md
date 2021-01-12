@@ -2,6 +2,12 @@
 
 The main goal of this project is to provide a wrapper around nmap, and
  distribute scans across several hosts.
+ 
+ PIP package published at 
+
+[pip3 url](https://pypi.org/project/dscan-4E656F/)
+[Documentation](https://dscan.readthedocs.io/en/0.1.1/)
+
 
 [Demo Video](https://www.youtube.com/watch?v=3wY6gpH_8rE).
 
