@@ -31,10 +31,10 @@ setup(
     ],
     scripts=['bin/dscan'],
     package_data={
-          name: ['data/*.conf'],
+          name: ['data/agent.conf', 'data/dscan.conf'],
        },
+    packages=find_packages(where='.', exclude='tests'),
     include_package_data=True,
-    packages=find_packages(exclude='tests'),
     python_requires='>=3.6',
     classifiers=[
             "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
