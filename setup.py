@@ -33,7 +33,7 @@ setup(
     package_data={
           name: ['data/agent.conf', 'data/dscan.conf'],
        },
-    packages=find_packages(where='.', exclude='tests'),
+    packages=find_packages(include=['dscan', 'dscan.*'], exclude='tests'),
     include_package_data=True,
     python_requires='>=3.6',
     classifiers=[
