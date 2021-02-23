@@ -3,12 +3,9 @@ from setuptools import find_packages, setup
 with open('README.md', encoding='utf-8') as f:
     readme_text = f.read()
 
-with open('LICENSE') as f:
-    license_text = f.read()
-
 name = 'dscan-4E656F'
-version = '0.1.1'
-release = '0.1.1'
+version = '0.1.4'
+release = '0.1.4'
 
 setup(
     name=name,
