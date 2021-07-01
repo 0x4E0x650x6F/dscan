@@ -10,13 +10,14 @@ import hmac
 import struct
 import random
 import threading
+import time
 from socket import socket
 from socket import AF_INET
 from socket import SOCK_STREAM
 from socket import timeout
 import ssl
 from dscan import log
-from dscan.models.structures import Structure
+from dscan.models.structures import Structure, Operations
 from dscan.models.structures import Auth
 from dscan.models.structures import Ready
 from dscan.models.structures import Status
@@ -135,10 +136,16 @@ class Agent:
                 log.info("Unable to receive command from server")
                 return
 
-            if cmd.target.decode("utf-8") == "":
-                log.info("server Send empty target Terminating!")
+            if cmd.op_code == Operations.STATUS and cmd.status == Status.FINISHED:
+                log.info("received a Finished status, Terminating!")
                 self.con_retries = 3
                 return
+
+            if cmd.op_code == Operations.STATUS and cmd.status == Status.UNFINISHED:
+                log.info("received a Unfinished will retry later!")
+                time.sleep(5)
+                log.info("retrying.. Target request!")
+                continue
 
             log.info(f"Launching scan on {cmd}")
             report = self.scan.run(cmd.target.decode("utf-8"),

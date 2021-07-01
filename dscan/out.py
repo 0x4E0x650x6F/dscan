@@ -6,6 +6,7 @@ out.py
 Display the information and status.
 """
 import sys
+import termios
 import threading
 
 
@@ -13,23 +14,40 @@ class Display:
     """
     Visualisation of the current execution status.
     """
-    CLEAR_SCREEN = "\033c"
+    CLEAR_SCREEN = "\033[H\033[2J\033[3J"
     CLEAR_CURRENT_LINE = "\033[1K\033[0G"
     TITLE = "Distributed Scan Status"
+
+    def __init__(self):
+        self.echo = True
+
+    def disable_echo(self):
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        new = termios.tcgetattr(fd)
+        new[3] = new[3] & ~termios.ECHO  # lflags
+        # try:
+        termios.tcsetattr(fd, termios.TCSADRAIN, new)
+        self.echo = False
+        # finally:
+        # termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
     def inline(self, message):
         """
         :param message: string message to print underneath the table printer.
         """
+        if self.echo:
+            self.disable_echo()
         sys.stdout.write(self.CLEAR_CURRENT_LINE)
         sys.stdout.write(f"message:\t{message}")
         sys.stdout.flush()
 
-    @staticmethod
-    def print_title(title):
+    def print_title(self, title):
         """
         :param title: Title of the tabular output.
         """
+        if self.echo:
+            self.disable_echo()
         title_length = len(title)
         sys.stdout.write("\n\n")
         sys.stdout.write("%s\n" % title.ljust(title_length))
@@ -43,6 +61,8 @@ class Display:
         :param data: a `list` of `tuple` with the data to be showed.
         :param clear: `bool` clear the previous print.
         """
+        if self.echo:
+            self.disable_echo()
         result = []
         names = list(headers)
         result.append(names)

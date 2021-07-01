@@ -9,7 +9,8 @@ from socket import AF_INET, SOCK_STREAM, socket
 from unittest.mock import MagicMock, mock_open, patch
 
 from dscan.models.scanner import Config, Context
-from dscan.models.structures import Auth, Ready, Report, Structure
+from dscan.models.structures import (Auth, ExitStatus, Ready, Report, Status,
+                                     Structure)
 from dscan.server import AgentHandler, DScanServer
 from tests import BufMock, create_config, data_path, log
 
@@ -101,6 +102,23 @@ class TestAgentHandler(unittest.TestCase):
 
         AgentHandler(mock_socket, ('127.0.0.1', '1234'), self.mock_server,
                      terminate_event=self.mock_terminate, context=self.ctx)
+        mock_socket.sendall.assert_called_with(
+            b'\x03\t\x10127.0.0.1-sV -Pn -p1-1000')
+        self.ctx.running.assert_called_once()
+        self.ctx.running.assert_called_with("127.0.0.1:1234")
+
+    @patch('socket.socket')
+    def test_wait(self, mock_socket):
+        buffer = BufMock(Auth(self.challenge), Ready(0, "bub"),
+                         Ready(0, "bub"), struct.pack("<B", 0))
+        mock_socket.recv = buffer.read
+        mock_data = MagicMock()
+        mock_data.side_effect = [None, ("127.0.0.1", "-sV -Pn -p1-1000")]
+        self.ctx.pop = mock_data
+
+        AgentHandler(mock_socket, ('127.0.0.1', '1234'), self.mock_server,
+                     terminate_event=self.mock_terminate, context=self.ctx)
+
         mock_socket.sendall.assert_called_with(
             b'\x03\t\x10127.0.0.1-sV -Pn -p1-1000')
         self.ctx.running.assert_called_once()

@@ -49,7 +49,7 @@ class Config:
         self.config = None
         if options.cmd == 'srv':
             self.config = ServerConfig(config, options, self.outdir)
-            self.sslkey = self.get_workPath(config.get(*self.SSL_CERTS[0:3:2]))
+            self.sslkey = self.get_work_path(config.get(*self.SSL_CERTS[0:3:2]))
             assert os.path.isfile(
                 self.sslkey), "Certificate Private key not found"
             self.ciphers = config.get(*self.SSL_CERTS[0:4:3])
@@ -57,7 +57,7 @@ class Config:
             self.host = options.s
         # set cert properties
 
-        self.sslcert = self.get_workPath(config.get(*self.SSL_CERTS[0:2:1]))
+        self.sslcert = self.get_work_path(config.get(*self.SSL_CERTS[0:2:1]))
         self.srv_hostname = config.get(*self.SSL_CERTS[0:5:4])
 
         assert os.path.isfile(self.sslcert), "Certificate file not found"
@@ -71,7 +71,7 @@ class Config:
             log.error(f"failed to open cert file {ex}")
             raise ex
 
-    def get_workPath(self, path):
+    def get_work_path(self, path):
         return os.path.join(self.wspace, path)
 
     def __getattr__(self, name):
@@ -783,7 +783,7 @@ class ScanProcess:
                                 digest)
                 self.print(target, 100)
                 return report
-            elif rc in (3, 4):
+            else:
                 callback(Status.FAILED)
                 log.error(f"Nmap Scan failed {nmap_proc.stderr}")
         except Exception as ex:

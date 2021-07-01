@@ -10,7 +10,8 @@ from unittest.mock import MagicMock, call, mock_open, patch
 import tests
 from dscan.client import Agent
 from dscan.models.scanner import Config, ScanProcess
-from dscan.models.structures import Auth, Command, Ready, Report
+from dscan.models.structures import (Auth, Command, ExitStatus, Ready, Report,
+                                     Status)
 
 
 class TestAgentHandler(unittest.TestCase):
@@ -198,6 +199,45 @@ class TestAgentHandler(unittest.TestCase):
         ]
 
         self.mock_server_responses(Auth(self.challenge), struct.pack("<B", 0),
+                                   Command("127.0.0.1", "-sV -Pn -p1-1000"),
+                                   struct.pack("<B", 1), struct.pack("<B", 0))
+
+        report_mock = mock_open(read_data=data)
+        with patch('random.choice') as mock_choice:
+            mock_choice.return_value = "A"
+            with patch('builtins.open', report_mock):
+                patcher = patch.object(ScanProcess, 'run',
+                                       return_value=expected)
+                patcher.start()
+                agent = Agent(self.settings)
+                agent.start()
+                self.check_mock_calls_connect_disconnect()
+                self.mock_socket.assert_has_calls(expected_calls,
+                                                  any_order=True)
+                patcher.stop()
+
+    @patch('os.getuid')
+    def test_wait(self, mgetuid):
+        mgetuid.return_value = 0
+
+        digest = hashlib.sha512(b"pickabu").hexdigest()
+        data = "hello hello report mock\n"
+        expected = Report(len(data), "fu.xml", digest)
+
+        expected_calls = [
+            call.connect(('127.0.0.1', 2040)),
+            call.sendall(Auth(self.digest_auth).pack()),
+            call.sendall(Ready(0, "AAAAAA").pack()),
+            call.sendall(expected.pack()),
+            call.sendall(data),
+            call.sendall(data),
+            call.sendall(Ready(0, "AAAAAA").pack()),
+            call.close()
+        ]
+
+        self.mock_server_responses(Auth(self.challenge),
+                                   struct.pack("<B", 0),
+                                   ExitStatus(Status.UNFINISHED),
                                    Command("127.0.0.1", "-sV -Pn -p1-1000"),
                                    struct.pack("<B", 1), struct.pack("<B", 0))
 

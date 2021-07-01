@@ -17,7 +17,7 @@ from socketserver import ThreadingMixIn
 from socketserver import BaseRequestHandler
 
 from dscan.models.scanner import Context
-from dscan.models.structures import Auth, Status
+from dscan.models.structures import Auth, Status, ExitStatus
 from dscan.models.structures import Command
 from dscan.models.structures import Structure
 from dscan import log
@@ -225,11 +225,16 @@ class AgentHandler(BaseRequestHandler):
 
         target_data = self.ctx.pop(self.agent)
         if not target_data:
-            log.info("Target is None no more targets")
-            # send empty command and terminate!
-            cmd = Command("", "")
-            self.request.sendall(cmd.pack())
-            self.connected = False
+            if self.ctx.is_finished:
+                log.info("Target is None and all stages are finished")
+                # send empty command and terminate!
+                cmd = Command("", "")
+                self.request.sendall(cmd.pack())
+                self.connected = False
+            else:
+                log.info("Waiting for a stage to finish")
+                cmd = ExitStatus(Status.UNFINISHED)
+                self.request.sendall(cmd.pack())
             return
 
         cmd = Command(*target_data)

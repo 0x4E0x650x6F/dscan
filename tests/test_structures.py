@@ -5,8 +5,8 @@ import unittest
 from socket import socket
 from unittest.mock import MagicMock, patch
 
-from dscan.models.structures import (Auth, Command, Operations, Ready, Report,
-                                     Status, Structure)
+from dscan.models.structures import (Auth, Command, ExitStatus, Operations,
+                                     Ready, Report, Status, Structure)
 
 
 class TestStructure(unittest.TestCase):
@@ -44,6 +44,14 @@ class TestStructure(unittest.TestCase):
             result = Structure.create(sock=mock_socket)
             self.assertEqual(expected.uid, result.uid)
             self.assertEqual(expected.alias, result.alias)
+
+    def test_result_status_pack_unpack(self):
+        expected = ExitStatus(Status.FINISHED)
+        mock_sock = self.build_mock(expected)
+        with patch('socket.socket', new=mock_sock) as mock_socket:
+            result = Structure.create(sock=mock_socket)
+            self.assertEqual(expected.op_code, result.op_code)
+            self.assertEqual(expected.status, result.status)
 
     def test_command_pack_unpack(self):
         expected = Command("127.0.0.1", "-sV -Pn -p1-1000")

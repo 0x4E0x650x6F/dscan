@@ -17,6 +17,7 @@ class Status(IntEnum):
     SUCCESS = 0x00
     UNAUTHORIZED = 0x01
     FINISHED = 0x02
+    UNFINISHED = 0x03
     FAILED = 0xFF
 
 
@@ -27,9 +28,8 @@ class Operations(IntEnum):
     AUTH = 0x01
     READY = 0x02
     COMMAND = 0x03
-    STATUS_REQ = 0x04
-    STATUS_RESP = 0x05
-    REPORT = 0x06
+    STATUS = 0x04
+    REPORT = 0x05
 
 
 class Structure:
@@ -165,6 +165,21 @@ class Command(Structure):
     def __str__(self):
         return f"Command(op_code={self.op_code}, target={self.target}, " \
                f"options={self.options})"
+
+
+class ExitStatus(Structure):
+    """
+      Scan Result Status !
+      Send both server and agent to signal the exit status of a operation.
+      final format is  <BB
+   """
+    __slots__ = ("status", )
+    _format = '<B'
+    op_code = Operations.STATUS
+
+    def __str__(self):
+        return f"Status(op_code={self.op_code}, " \
+               f"status={self.status}"
 
 
 class Report(Structure):
