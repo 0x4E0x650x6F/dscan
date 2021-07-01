@@ -4,8 +4,8 @@ with open('README.md', encoding='utf-8') as f:
     readme_text = f.read()
 
 name = 'dscan-4E656F'
-version = '0.1.4'
-release = '0.1.4'
+version = '0.1.5'
+release = '0.1.5'
 
 setup(
     name=name,
