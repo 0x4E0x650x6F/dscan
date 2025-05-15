@@ -4,16 +4,13 @@ with open('README.md', encoding='utf-8') as f:
     readme_text = f.read()
 
 name = 'dscan-4E656F'
-version = '0.1.5'
-release = '0.1.5'
+version = '0.1.7'
+release = '0.1.7'
 
 setup(
     name=name,
     version=version,
-    description=(
-        'Wrapper around nmap allow nmap scans to be distributed',
-        'With resume, and address optimization.'
-    ),
+    description="Wrapper around nmap allow nmap scans to be distributed with resume, and address optimization.",
     long_description=readme_text,
     long_description_content_type='text/markdown',
     license="GPL version 3",
