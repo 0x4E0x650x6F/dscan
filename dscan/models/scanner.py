@@ -799,9 +799,12 @@ class ScanProcess:
                     subproc.stderr.close()
 
     def print(self, target, progress):
-        self.display.print_table(self.TASK_HEADERS,
+        try:
+            self.display.print_table(self.TASK_HEADERS,
                                  [(target, self.number_scans,
                                    progress)], clear=True)
+        except Exception as ex:
+            log.error(f"unable to update the display {ex}")
 
     def show_status(self, nmapscan=None):
         """

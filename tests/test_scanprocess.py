@@ -8,9 +8,12 @@ from dscan.models.scanner import ScanProcess, Status
 class TestScanProcess(unittest.TestCase):
     def setUp(self):
         self.callback = Mock()
+        # libnmap.process.NmapProcess
         self.patch_nmap_proc = patch('dscan.models.scanner.NmapProcess')
+        self.patch_display = patch('dscan.models.scanner.Display')
         mopen = patch('builtins.open', spec=open)
         self.file_mock = mopen.start()
+        self.mock_display = self.patch_display.start()
         # patching sleep to speed the test execution
         running_mock = MagicMock(side_effect=[True, True, True, False])
         run_mock = MagicMock(return_value=0)
@@ -22,6 +25,7 @@ class TestScanProcess(unittest.TestCase):
         self.mock_nmap_proc().stdout = "Hello Mock output"
         self.addCleanup(self.patch_nmap_proc.stop)
         self.addCleanup(mopen.stop)
+        self.addCleanup(self.mock_display.stop)
 
     def tearDown(self):
         self.patch_nmap_proc.stop()

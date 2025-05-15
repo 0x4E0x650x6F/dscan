@@ -50,28 +50,28 @@ class DScanServer(ThreadingMixIn, TCPServer):
         """
         Used to add ssl support.
 
-        :return: returns a `ssl.wrap_socket`
-        :rtype: ´ssl.wrap_socket´
+        :return: returns a `ssl.SSLSocket`
+        :rtype: ´ssl.SSLSocket´
         """
         # noinspection PyTupleAssignmentBalance
         client, addr = super().get_request()
-        # TODO: protocol version is hardcoded!
-        client_ssl = ssl.wrap_socket(client, keyfile=self.options.sslkey,
-                                     certfile=self.options.sslcert,
-                                     ssl_version=ssl.PROTOCOL_TLSv1_2,
-                                     ca_certs=None,
-                                     server_side=True,
-                                     do_handshake_on_connect=True,
-                                     suppress_ragged_eofs=True,
-                                     ciphers=self.options.ciphers)
+        # note: fixed to address the deprecation of ss.wrap_socket
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ssl_context.load_cert_chain(certfile=self.options.sslcert,
+                                    keyfile=self.options.sslkey)
+        ssl_context.set_ciphers(self.options.ciphers)
+        client_ssl = ssl_context.wrap_socket(client,
+                                             server_side=True,
+                                             do_handshake_on_connect=True,
+                                             suppress_ragged_eofs=True)
         return client_ssl, addr
 
     def finish_request(self, request, client_address) -> BaseRequestHandler:
         """
         Finish one request by instantiating RequestHandlerClass.
 
-        :return: `RequestHandlerClass`
-        :rtype: ´RequestHandlerClass´
+        :return: `dscan.server.AgentHandler`
+        :rtype: ´dscan.server.AgentHandler´
         """
         return self.RequestHandlerClass(request, client_address,
                                         self, terminate_event=self._terminate,
@@ -94,6 +94,7 @@ class AgentHandler(BaseRequestHandler):
     Created when an agent connects, holds all the agents available actions.
     Terminates when scan targets finishes or an agent disconnects.
     """
+
     def __init__(self, *args, terminate_event, context, **kwargs):
         self._terminate = terminate_event
         self.ctx = context
@@ -122,7 +123,7 @@ class AgentHandler(BaseRequestHandler):
         :rtype: `bool`
         """
         return self.connected and not self._terminate.is_set() \
-            and not self.ctx.is_finished
+               and not self.ctx.is_finished
 
     def dispatcher(self):
         """
