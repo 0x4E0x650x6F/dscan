@@ -56,7 +56,7 @@ ip or networks to scan.
 
 ````bash
 
-%dscan --name project name srv --config dscan.conf targets.txt
+%dscan --name <project-name> srv --config dscan.conf targets.txt
     
     Distributed Scan Status
     ========================
