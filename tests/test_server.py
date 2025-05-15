@@ -185,7 +185,7 @@ class TestAgentHandler(unittest.TestCase):
             # Exit the server thread when the main thread terminates
             server_thread.daemon = True
             server_thread.start()
-            log.info(f"Server loop running in thread:{server_thread.name}")
+            log.info(f"Server loop running in thread: {server_thread.name}")
             context = ssl.create_default_context()
             context.check_hostname = False
             context.load_verify_locations(self.settings.sslcert)

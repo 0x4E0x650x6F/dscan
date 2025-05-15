@@ -43,7 +43,7 @@ class TestCase(unittest.TestCase):
         agent = Agent(self.settings_agent)
         try:
             server_thread.start()
-            log.info(f"Server loop running in thread:{server_thread.name}")
+            log.info(f"Server loop running in thread: {server_thread.name}")
             out = ContextDisplay(server.ctx)
             out.show()
 
